@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { isIP } from 'node:net';
+
+const trustedProxy = z.string().refine(value => {
+  const [address, prefix, extra] = value.split('/');
+  const family = isIP(address);
+  if (!family || extra !== undefined) return false;
+  return prefix === undefined || (/^\d+$/.test(prefix) && Number(prefix) > 0 && Number(prefix) <= (family === 4 ? 32 : 128));
+});
 
 const schema = z.object({
   port: z.coerce.number().int().min(1).max(65535),
@@ -12,6 +20,7 @@ const schema = z.object({
   hourlyLimit: z.coerce.number().int().min(1).max(10000),
   ipLimit: z.coerce.number().int().min(1).max(1000),
   concurrency: z.coerce.number().int().min(1).max(20),
+  trustedProxies: z.array(trustedProxy),
 });
 export type Config = z.infer<typeof schema>;
 
@@ -29,6 +38,7 @@ export function readConfig(env = process.env): Config {
     hourlyLimit: env.MAX_REQUESTS_PER_HOUR || 300,
     ipLimit: env.MAX_REQUESTS_PER_IP_10_MIN || 60,
     concurrency: env.MAX_CONCURRENT_REQUESTS || 4,
+    trustedProxies: (env.TRUSTED_PROXY_CIDRS || '').split(',').map(value => value.trim()).filter(Boolean),
   });
   if (!result.success) {
     // Never serialize config validation errors: they can contain credential input.

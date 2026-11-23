@@ -83,10 +83,10 @@ const translationResponse = z.object({ translated_text: z.string().trim().min(1)
 
 export function createSarvam(config: Config, fetcher: typeof fetch = fetch): SpeechProvider {
   async function call(endpoint: string, body: BodyInit, json: boolean, signal: AbortSignal): Promise<unknown> {
-    if (!config.sarvamKey) throw new AppError(503, 'speech_not_configured', 'Sarvam voice is not configured. Set SARVAM_API_KEY on the server; text input remains available.');
+    if (!config.sarvamKey) throw new AppError(503, 'speech_not_configured', 'Sarvam voice is not configured. Add a tab key over HTTPS or configure SARVAM_API_KEY on your server; text input remains available.');
     try {
       const response = await fetcher(`https://api.sarvam.ai/${endpoint}`, {
-        method: 'POST', signal,
+        method: 'POST', signal, redirect: 'error',
         headers: { 'api-subscription-key': config.sarvamKey, ...(json ? { 'Content-Type': 'application/json' } : {}) },
         body,
       });

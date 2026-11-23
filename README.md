@@ -13,22 +13,33 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Open **http://localhost:3000**. The fictional example works without keys. Live analysis and speech are explicitly unavailable until their respective providers are configured. A configured status means a key is present, not that billing or account access has been verified.
+Open **http://localhost:3000**. The fictional example and typed material work without keys. Optional host/demo environment keys enable their respective providers. Personal tab keys require **HTTPS**, including localhost; key entry is disabled on the HTTP preview and it will not transmit them. A configured status means a key is present, not that billing or account access has been verified.
+
+### Session-only bring your own keys
+
+**Provider access** offers separate optional Claude and Sarvam password inputs. After choosing **Use … key in this tab**, the input is cleared and only configuration status is shown. The keys are held in a tab-local memory ref, not React-rendered values, browser storage, cookies, URLs, analytics, exports, logs, or service-worker caches. A full refresh, leaving the page, or **Clear keys** removes them; a new tab starts without keys. Clear keys also clears unfinished input fields and cancels pending analysis/voice, preserving accepted text and the PM's record. Provider work already started may still be billed.
+
+A tab key takes precedence **only for its provider**. Removing it restores any visibly labeled **Host/demo key configured** configuration; invalid personal credentials do not silently fall back to host credentials. Claude supports a workspace-scoped Console API key with Messages/model access and billing, not Claude chat-subscription access. Unscoped Claude keys need an additional workspace header and are not supported by this key-only UI. Sarvam needs an API subscription key with speech/translation access and quota. There is no automatic validation call or paid retry.
+
+Keys go only to the configured same-origin HTTPS backend, in `X-Studio-Claude-Key` for `/api/clarify` and `/api/review`, or `X-Studio-Sarvam-Key` for the three `/api/speech/*` operations. The browser does not call providers directly, follow redirects with credentials, or include keys in request bodies. The backend rejects mixed/wrong-provider, duplicate, invalid/overlong, and non-HTTPS credentials. It strips credential headers from parsed/raw request headers, consumes the key into a fresh provider client for that one operation, and retains no attendee session, cache, database, or process-wide credential map.
+
+The backend necessarily receives the selected key. Use only an operator you trust. If you do not want your key passing through someone else's backend, self-host with the optional server environment keys instead. Claude uses its official SDK with an explicit `https://api.anthropic.com` base URL, API version `2026-10-21`, retries disabled and SDK logging off; the current [authentication documentation](https://platform.claude.com/docs/en/manage-claude/authentication) supports its API-key bearer authentication and requires workspace selection for unscoped keys. Sarvam uses only `https://api.sarvam.ai` with `api-subscription-key`. Provider redirects are rejected. Provider errors and app logs use safe metadata, never upstream credential diagnostics. Otherwise-valid provider content reflecting the supplied key is rejected on the backend and browser rather than echoed into a transcript, review, or translation.
 
 ### Server configuration
 
-`.env.example` contains variable names and explanatory comments, with no credentials. Never use `VITE_` variables for secrets, put keys in browser storage, or add a browser BYOK field.
+`.env.example` contains variable names and explanatory comments, with no credentials. Never use `VITE_` variables for secrets or put keys in browser storage. Environment keys are optional **host/demo** configuration and never sent to the frontend.
 
 | Variable | Purpose / default |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Anthropic Console API key with Messages API access and funded billing; required for live analysis |
+| `ANTHROPIC_API_KEY` | Optional host/demo Anthropic Console API key with Messages API access and funded billing; a Claude tab key overrides it |
 | `ANTHROPIC_MODEL` | `claude-sonnet-5-5`; use an account-accessible model supporting structured outputs |
-| `SARVAM_API_KEY` | Sarvam API subscription key with STT/TTS/translation access and quota |
+| `SARVAM_API_KEY` | Optional host/demo Sarvam API subscription key with STT/TTS/translation access and quota; a Sarvam tab key overrides it |
 | `SARVAM_TTS_MODEL` | `bulbul:v4-flash`; also supports `bulbul:v3` |
 | `SARVAM_TTS_SPEAKER` | `shubh_enhi_companion` for v4-flash, `shubh` for v3; must match the chosen model's official voice catalog |
 | `PORT` | `3000` |
 | `HOST` | `127.0.0.1`; use `0.0.0.0` for containers |
 | `APP_ORIGIN` | `http://localhost:3000`; deployed public HTTPS origin, with **no trailing slash or path** |
+| `TRUSTED_PROXY_CIDRS` | Empty by default; comma-separated audited gateway IPs/CIDRs, never wildcard/all-network trust. Required for backend HTTPS recognition behind a TLS-terminating gateway |
 | `MAX_REQUESTS_PER_HOUR` | `300` combined provider requests per server process |
 | `MAX_REQUESTS_PER_IP_10_MIN` | `60` combined requests per connection in ten minutes |
 | `MAX_CONCURRENT_REQUESTS` | `4` concurrent API requests |
@@ -91,7 +102,7 @@ The design uses product-owned warm-white/charcoal tokens, a single rose accent, 
 
 ### Privacy and limits
 
-No accounts, database, analytics, raw request logging, automatic external research, uploads of arbitrary documents, hosted BYOK, or automatic sharing.
+No app accounts, database, analytics, raw request logging, automatic external research, uploads of arbitrary documents, persisted attendee credentials, or automatic sharing.
 
 Text, reviews, decisions, and audio stay in memory by default. Reloading clears them. The optional **Keep this unsent draft on this device** checkbox stores only idea/context text in localStorage. Saved drafts are not automatically restored; they must be restored or deleted explicitly. Unchecking deletes that draft. Browser storage is not encrypted and is accessible to people using the same browser. Audio is not stored in localStorage or the service-worker cache.
 
@@ -103,7 +114,7 @@ Errors are logged only as generic event/code/status metadata. Upstream error mes
 
 Limits use in-memory stores. They reset on restart and are **not shared across replicas**. Origin checks are browser cross-origin protection, not authentication. For an internet-hosted showcase, use a single instance, provider-side spend limits, and an invite-only reverse-proxy/access policy. This MVP is not an abuse-proof public API.
 
-Proxy trust is deliberately off: forwarded IP headers cannot bypass limits. Behind a reverse proxy, attendees may share its per-connection budget. Only change proxy trust with audited, network-specific deployment configuration; never blindly trust all forwarded headers.
+Proxy trust is off unless `TRUSTED_PROXY_CIDRS` explicitly lists audited proxy addresses. Forwarded IP/protocol headers from untrusted peers cannot bypass limits or enable personal-key requests. An HTTPS gateway must overwrite client-supplied forwarding headers and connect from one of those addresses; Node must remain private to it. The backend requires both an HTTPS `APP_ORIGIN` and an actually secure request, or HTTPS recognized through that trusted gateway. With trust off, attendees behind a proxy may share its per-connection budget. BYOK and demo requests share the same per-connection, hourly, input and concurrency limits; no budget is keyed by an attendee secret.
 
 ## Production / self-host
 
@@ -121,7 +132,7 @@ docker build -t bet-studio .
 docker run --rm -p 127.0.0.1:3000:3000 --env-file .env bet-studio
 ```
 
-When using a container, set `HOST=0.0.0.0` in the environment. Set `APP_ORIGIN` to the URL users actually open. Configure both keys in the host's secret environment, not in the image or repository. `.dockerignore` excludes real environment files.
+When using a container, set `HOST=0.0.0.0` in the environment. Set `APP_ORIGIN` to the URL users actually open. Host/demo provider keys are optional; configure them in the host's secret environment, not in the image or repository. `.dockerignore` excludes real environment files.
 
 Put an HTTPS reverse proxy in front of the Node service and serve the app at the origin root, not under a subpath. Microphone access, installation, service workers, and reliable clipboard support require HTTPS (localhost is the development exception). Disable proxy access/body logging and audio/request buffering to disk. Set provider-side budgets and access controls before opening the URL to attendees.
 
@@ -132,7 +143,7 @@ Put an HTTPS reverse proxy in front of the Node service and serve the app at the
 - Require an authenticated email allowlist / invitation policy at the HTTPS gateway for **every route, including `/api/*`**, not just the landing page. Deny anonymous users before requests reach Node; verify unauthenticated direct API requests are denied.
 - Keep the Node port private to the gateway (loopback or a private container network). Do not expose a second ungated origin or publish a container port to all interfaces. Only the gateway should be able to reach it.
 - Put secrets in the host's secret environment, set provider-side spending/quota alerts and hard limits where available, and start with one instance and low process-wide limits. In-memory request caps are not money-denominated or durable billing controls.
-- Disable gateway/body/diagnostic recording, disk request buffering, and API response caching. Forward aborts; allow enough upstream time for the bounded 75-second analysis / 45-second speech and translation requests (Anthropic SDK timeout: 70 seconds). Use synthetic or permissioned material only.
+- Disable gateway/body/diagnostic recording, disk request buffering, and API response caching. Never log `X-Studio-Claude-Key`, `X-Studio-Sarvam-Key`, provider authentication headers, or request bodies; redact them at every gateway/APM layer before accepting BYOK. Trust only the actual TLS gateway addresses, overwrite incoming forwarding headers, and verify direct/untrusted HTTP requests cannot use attendee keys. Forward aborts; allow enough upstream time for the bounded 75-second analysis / 45-second speech and translation requests (Anthropic SDK timeout: 70 seconds). Use synthetic or permissioned material only.
 - Event Wi-Fi, NAT, and the reverse proxy can pool participants behind a connection limit. Test the actual venue path, keep short turns, account for shared limits, and use the explicit fictional example if connectivity or quota fails; never silently retry a paid call.
 
 The public shell can still be opened from an already installed offline cache after gateway access is revoked. That shell contains no provider credentials or cached reviews/audio. Locally opted-in drafts remain device data; revoking hosted access cannot remotely erase them. The gateway must independently authorize **every live API request**.
@@ -158,9 +169,9 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Unit/integration tests cover structured output, exact source quotes, unsupported references, duplicate decisions, missing configuration, provider errors, audio duration, current Sarvam request fields including translation, sentence-aware chunking, origin checks, payload bounds, and shared request limits despite spoofed forwarded headers.
+Unit/integration tests cover structured output, exact source quotes, unsupported references, duplicate decisions, missing configuration, provider errors, audio duration, current Sarvam request fields including translation, sentence-aware chunking, origin checks, payload bounds, and shared request limits despite spoofed forwarded headers. BYOK tests use synthetic keys and mocked upstream SDK/REST responses to check provider isolation, request-only precedence, concurrent attendee isolation, later requests without keys, trusted TLS, invalid credentials, redirects, log/error redaction and usage caps.
 
-Production browser tests cover desktop and phone layouts (including dark OS preferences with an always-light app); readable text/action contrast; grounded leadership narrative and human/agent decision separation; download; live-workflow retry and invalidation; consented mixed-language/translated transcripts; denied microphones and capped recordings; Hindi translation before TTS, malformed-translation failures, grounded finding-level speech, stop/replay without new requests and visible playback errors; draft isolation/restoration; and real offline service-worker behavior. Production PWA tests also verify manifest/icon paths and PNG dimensions, actual installation, waiting-version notices without lost input, activation after closing tabs, old-cache cleanup, and failed initial installation/update. Unit tests exercise cache/auth boundaries and corrupt WAV rejection. Provider responses in automated tests are explicitly mocked; no paid calls are made.
+Production browser tests cover desktop and phone layouts (including dark OS preferences with an always-light app); readable text/action contrast; grounded leadership narrative and human/agent decision separation; download; live-workflow retry and invalidation; consented mixed-language/translated transcripts; denied microphones and capped recordings; Hindi translation before TTS, malformed-translation failures, grounded finding-level speech, stop/replay without new requests and visible playback errors; draft isolation/restoration; and real offline service-worker behavior. BYOK browser tests intercept a synthetic HTTPS origin without bypassing certificate validation or forwarding credentials to any real service; they verify separate request headers, cleared input fields, refresh/new-tab isolation, no browser-storage/export/log leakage, explicit failure without demo fallback, cancellation on clearing, and HTTP refusal. Production PWA tests also verify manifest/icon paths and PNG dimensions, actual installation, waiting-version notices without lost input, activation after closing tabs, old-cache cleanup, and failed initial installation/update. Unit tests exercise cache/auth boundaries and corrupt WAV rejection. Provider responses in automated tests are explicitly mocked; no paid calls are made.
 
 **Live provider quality and real-phone behavior remain unverified.** After secure key configuration, use only the limited synthetic Sarvam smoke allowance above. Further provider calls, including Claude and additional language/voice comparisons, need separate approval. Automated fixtures cannot verify account access, billing, model availability, translation fidelity, regional latency, transcription quality, or the selected voice. Container deployment and physical iOS/Android installation also require host/device checks.
 
@@ -171,6 +182,7 @@ Production browser tests cover desktop and phone layouts (including dark OS pref
 - [ ] Start with missing keys and confirm the explicit example/unavailable states. Use synthetic material to check correction/invalidation, unknown answers, no-evidence narrative, and a PM decision that differs from the agent. Confirm copy/download includes the unchanged rationale and full sources.
 - [ ] When a key is securely configured, make at most one synthetic STT, one TTS, and one Hindi-translation call; record outcomes and do not retry paid failures. Additional Claude, language-mode, or voice-quality comparisons require separate approval.
 - [ ] On a real phone, verify edited transcript consent, retry/discard, the 28-second cap, Hindi translation fidelity and unchanged written record, all returned WAV segments, blocked autoplay, stop/abort/replay, and long-text chunking. Use mocks or the permitted synthetic smoke calls until broader paid testing is approved.
+- [ ] On an approved HTTPS/private-gateway setup, verify key clearing, refresh/new-tab behavior, trusted TLS detection, and credential redaction at proxy/APM layers. Do not enter real attendee keys into an untrusted backend or bypass TLS for local demos.
 - [ ] On physical devices, test microphone-denied/unavailable/interrupted states, install icons, airplane-mode shell/example, explicit unencrypted draft restore/delete, and failed/slow networks. Confirm API/text/audio are absent from Cache Storage.
 - [ ] Repeat the automated two-version worker lifecycle check on a physical installed PWA: retain active work while waiting, close all app clients, reopen, and confirm the new shell and cache cleanup. Desktop Chromium automation does not prove iOS/Android installed-app behavior.
 - [ ] Only after separately approving a hosted deployment, verify the gateway deny/allow list, private origin, API authorization, provider spending controls, request logging disabled, venue Wi-Fi limits, and secret-free Docker/source archives.
@@ -196,8 +208,9 @@ This pass remains local. Before any separately approved hosted session, enforce 
 | `src/App.tsx`, `src/styles.css`, `src/sample.ts` | Editorial journey, design tokens, review/decision screens, fictional scenario |
 | `shared/schema.ts` | Input/output contracts, source identifiers/checks, deterministic full decision pack |
 | `src/Voice.tsx`, `src/audio.ts`, `src/api.ts` | Recording/transcript consent, resampling, playback, provider requests and errors |
+| `src/Credentials.tsx`, `shared/credentials.ts` | Tab-only keys, configuration disclosure, cancellation/clearing, provider/header isolation |
 | `server/claude.ts`, `server/speech.ts` | Controlled Claude stages and replaceable Sarvam adapter |
-| `server/app.ts`, `server/config.ts`, `server/errors.ts`, `server/index.ts` | Server-only keys, origin/usage/payload limits, error sanitization, serving |
+| `server/app.ts`, `server/config.ts`, `server/errors.ts`, `server/index.ts` | Optional host keys and request-only BYOK, trusted TLS, origin/usage/payload limits, error sanitization, serving |
 | `src/useDraft.ts` | Explicit, device-local unsent-draft persistence |
 | `pwa/sw.js`, `vite.config.ts`, `src/main.tsx`, `public/manifest.webmanifest`, `public/icons/` | Versioned static-only caching, registration, installation assets |
 | `.env.example`, `Dockerfile`, `.dockerignore`, `package.json` | Self-host configuration, build and deployment |

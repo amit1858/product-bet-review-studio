@@ -3,8 +3,9 @@ import {
 } from 'react';
 import { Mic, Play, RotateCcw, Settings2, Square, Volume2, X } from 'lucide-react';
 import { z } from 'zod';
-import { request, type ProviderStatus } from './api';
+import { type ProviderStatus, type Requester } from './api';
 import { RECORDING_LIMIT, recordingToWav, speechChunks } from './audio';
+import { useCredentialAccess } from './Credentials';
 
 type Settings = { language: 'en-IN' | 'hi-IN'; voice: string; pace: number };
 type Playback = { id: string; label: string; state: 'translating' | 'preparing' | 'playing' };
@@ -18,6 +19,8 @@ type VoiceContextType = {
   playback: Playback | null;
   play: (text: string, id: string, label: string) => Promise<void>;
   stop: () => void;
+  request: Requester;
+  credentialEpoch: number;
 };
 const VoiceContext = createContext<VoiceContextType | null>(null);
 const transcriptSchema = z.object({ transcript: z.string().trim().min(1).max(8000), language: z.string().nullable() });
@@ -53,6 +56,8 @@ function playAudio(url: string, signal: AbortSignal, onAudio: (audio: HTMLAudioE
 export function VoiceProvider({ children, providers, online, onCaptureChange, sessionKey }: {
   children: ReactNode; providers: ProviderStatus | null; online: boolean; onCaptureChange: (busy: boolean) => void; sessionKey: string;
 }) {
+  const access = useCredentialAccess();
+  const request = access.request;
   const [settings, setSettings] = useState<Settings>({ language: 'en-IN', voice: '', pace: 1 });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -64,7 +69,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
   const controller = useRef<AbortController | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const cache = useRef<{ key: string; urls: string[] } | null>(null);
-  const enabled = !!providers?.speech && online;
+  const enabled = online && (access.configured.sarvam ? access.secure : !!providers?.speech);
   const stop = useCallback(() => {
     controller.current?.abort(); controller.current = null;
     audio.current?.pause(); audio.current = null; setPlayback(null);
@@ -74,15 +79,15 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
     cache.current = null;
   }, []);
   useEffect(() => { onCaptureChange(!!capturing); }, [capturing, onCaptureChange]);
-  useEffect(() => { stop(); }, [sessionKey, online, stop]);
-  useEffect(() => { clearCache(); setReplay(null); setTranslatedText(''); }, [sessionKey, clearCache]);
+  useEffect(() => { stop(); }, [sessionKey, online, access.epoch, stop]);
+  useEffect(() => { clearCache(); setReplay(null); setTranslatedText(''); setError(''); }, [sessionKey, access.epoch, clearCache]);
   useEffect(() => {
     if (providers?.defaultVoice) setSettings(s => ({ ...s, voice: s.voice || providers.defaultVoice }));
   }, [providers?.defaultVoice]);
   useEffect(() => () => { controller.current?.abort(); audio.current?.pause(); clearCache(); }, [clearCache]);
   const play = useCallback(async (text: string, id: string, label: string) => {
     stop(); setError('');
-    if (!enabled) { setError('Read aloud needs internet and a server-side Sarvam key. The full text remains available.'); return; }
+    if (!enabled) { setError('Read aloud needs internet and Sarvam configuration; personal tab keys require HTTPS. The full text remains available.'); return; }
     if (text.length > 18000) { setError('This spoken section is too long. Read the individual findings aloud instead, or shorten your decision rationale.'); return; }
     const active = new AbortController();
     setReplay({ text, id, label });
@@ -129,19 +134,19 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
       setPlayback({ id, label, state: 'playing' });
       for (const url of urls) await playAudio(url, active.signal, value => { audio.current = value; });
     } catch (e) {
-      if (!active.signal.aborted) setError(e instanceof z.ZodError
+      if (!active.signal.aborted && !(e instanceof Error && e.name === 'AbortError')) setError(e instanceof z.ZodError
         ? 'The speech response was invalid. Your text is unchanged; retry playback.'
         : e instanceof Error ? e.message : 'Speech playback failed. Please retry.');
     } finally {
       if (cache.current?.urls !== pending) pending.forEach(url => URL.revokeObjectURL(url));
       if (controller.current === active) { controller.current = null; audio.current = null; setPlayback(null); }
     }
-  }, [enabled, settings, stop, clearCache]);
+  }, [enabled, settings, stop, clearCache, request]);
   function changeSettings(next: Settings) {
     stop(); clearCache(); setReplay(null); setTranslatedText(''); setError(''); setSettings(next);
   }
 
-  return <VoiceContext.Provider value={{ enabled, capturing, setCapturing, releaseCapture, settings, playback, play, stop }}>
+  return <VoiceContext.Provider value={{ enabled, capturing, setCapturing, releaseCapture, settings, playback, play, stop, request, credentialEpoch: access.epoch }}>
     {children}
     <div className="voice-settings">
       <button className="text-button" onClick={() => setSettingsOpen(v => !v)} aria-expanded={settingsOpen}><Settings2 size={16} /> Voice & playback settings</button>
@@ -212,10 +217,10 @@ export function SpeakInput({ label, onApply, disabled = false }: {
     setState('processing'); setError(''); voice.setCapturing(id);
     try {
       const form = new FormData(); form.append('audio', blob, 'recording.wav'); form.append('mode', mode);
-      const response = transcriptSchema.parse(await request('/api/speech/transcribe', { method: 'POST', body: form, signal: active.signal }));
+      const response = transcriptSchema.parse(await voice.request('/api/speech/transcribe', { method: 'POST', body: form, signal: active.signal }));
       if (mounted.current && !active.signal.aborted) { setTranscript(response.transcript); setState('transcript'); }
     } catch (e) {
-      if (mounted.current && !active.signal.aborted) {
+      if (mounted.current && !active.signal.aborted && !(e instanceof Error && e.name === 'AbortError')) {
         setError(e instanceof z.ZodError
           ? 'No usable transcript was returned. Retry this recording, record again, or type your answer.'
           : e instanceof Error ? e.message : 'Transcription failed. Retry or type your answer.');
@@ -272,11 +277,12 @@ export function SpeakInput({ label, onApply, disabled = false }: {
       setState('error');
     }
   }
-  function discard() {
+  const discard = useCallback(() => {
     cancelled.current = true; generation.current++; controller.current?.abort();
     if (recorder.current?.state === 'recording') recorder.current.stop();
-    release(); recording.current = null; setTranscript(''); setTrimmed(false); setState('idle'); setError(''); voice.releaseCapture(id);
-  }
+    release(); recording.current = null; setTranscript(''); setTrimmed(false); setState('idle'); setError(''); voiceRef.current.releaseCapture(id);
+  }, [id, release]);
+  useEffect(() => { discard(); }, [voice.credentialEpoch, discard]);
   function apply() {
     if (onApply(transcript.trim())) discard();
     else setError('This transcript does not fit the field’s text limit. Shorten it here; your recording and transcript have not been discarded.');
@@ -289,7 +295,7 @@ export function SpeakInput({ label, onApply, disabled = false }: {
       {['idle', 'error'].includes(state) && <label className="speech-mode"><span className="sr-only">Transcription mode for {label}</span><select value={mode} onChange={e => setMode(e.target.value === 'translate' ? 'translate' : 'codemix')} disabled={!!voice.capturing || disabled}><option value="codemix">Keep mixed language</option><option value="translate">Translate to English</option></select></label>}
       {['permission', 'recording', 'processing', 'transcript'].includes(state) && <button className="text-button" onClick={discard}>Discard</button>}
     </div>
-    {state === 'idle' && <small>{!supported ? 'Microphone is unavailable in this browser. Text input is fully supported.' : !voice.enabled ? 'Voice requires internet and server-side Sarvam configuration. You can keep typing.' : 'English, Hindi, or both. Tap to start, tap to finish. Up to 28 seconds. No background recording.'}</small>}
+    {state === 'idle' && <small>{!supported ? 'Microphone is unavailable in this browser. Text input is fully supported.' : !voice.enabled ? 'Voice needs internet and Sarvam configuration; personal tab keys require HTTPS. You can keep typing.' : 'English, Hindi, or both. Tap to start, tap to finish. Up to 28 seconds. No background recording.'}</small>}
     {trimmed && <p className="recording-limit" role="status">This turn was limited to its first 28 seconds. Add another turn for anything beyond that.</p>}
     {state === 'permission' && <p role="status">Waiting for microphone permission. Nothing is recording yet.</p>}
     {state === 'recording' && <p role="status"><span className="record-dot" /> Recording · {RECORDING_LIMIT - seconds}s remaining. Audio goes to Sarvam when you finish; not to Claude.</p>}

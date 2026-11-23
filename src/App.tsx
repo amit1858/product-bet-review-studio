@@ -11,6 +11,7 @@ import * as api from './api';
 import { sampleClarification, sampleContext, sampleIdea, sampleReview } from './sample';
 import { ReadAloud, SpeakInput, VoiceProvider } from './Voice';
 import { useDraft } from './useDraft';
+import { ProviderAccess, useCredentialAccess } from './Credentials';
 
 type Stage = 'welcome' | 'material' | 'clarify' | 'review' | 'pack';
 const labels: Record<Decision, string> = { proceed: 'Proceed', test: 'Test first', reshape: 'Reshape', stop: 'Stop' };
@@ -41,6 +42,7 @@ function ErrorNotice({ message, dismiss }: { message: string; dismiss: () => voi
 }
 
 export function App() {
+  const access = useCredentialAccess();
   const [stage, setStage] = useState<Stage>('welcome');
   const [idea, setIdea] = useState('');
   const [context, setContext] = useState('');
@@ -63,6 +65,12 @@ export function App() {
   const draft = useDraft(idea, context);
   const heading = useRef<HTMLHeadingElement>(null);
   const ideaField = useRef<HTMLTextAreaElement>(null);
+  const analysis = useRef<AbortController | null>(null);
+  const aiReady = access.configured.claude ? access.secure : !!providers?.ai;
+  useEffect(() => {
+    analysis.current?.abort(); analysis.current = null; setBusy('');
+  }, [access.epoch]);
+  useEffect(() => () => analysis.current?.abort(), []);
 
   async function refreshStatus() {
     try {
@@ -124,24 +132,30 @@ export function App() {
   }
   async function runClarification() {
     setError(''); setBusy('Reading your material and finding the questions that matter…');
+    const active = new AbortController(); analysis.current = active;
     try {
       const value = inputSchema.parse({ idea, context, answers: [] });
-      const next = illustrative ? sampleClarification : await api.clarify(value);
+      const next = illustrative ? sampleClarification : await api.clarify(value, access.request, active.signal);
+      if (active.signal.aborted) return;
       setClarification(next); setUnderstanding(next.bet); setAnswers({});
       setStage('clarify');
     } catch (e) {
+      if (active.signal.aborted || (e instanceof Error && e.name === 'AbortError')) return;
       setError(e instanceof Error ? (e.name === 'ZodError' ? 'Check your input: the bet needs 10–4,000 characters; supporting material can be up to 14,000.' : e.message) : 'Clarification failed. Please retry.');
-    } finally { setBusy(''); }
+    } finally { if (analysis.current === active) { analysis.current = null; setBusy(''); } }
   }
   async function runReview() {
     setError(''); setBusy('Separating signals from assumptions. Challenging the bet. Designing the smallest test…');
+    const active = new AbortController(); analysis.current = active;
     try {
       const value = input();
-      const next = illustrative ? sampleReview : await api.review(value);
+      const next = illustrative ? sampleReview : await api.review(value, access.request, active.signal);
+      if (active.signal.aborted) return;
       setResult(next); setReviewInput(value); setDecision(null); setRationale(''); setStage('review');
     } catch (e) {
+      if (active.signal.aborted || (e instanceof Error && e.name === 'AbortError')) return;
       setError(e instanceof Error ? (e.name === 'ZodError' ? 'The input or review could not be validated. Check text limits and retry; your material is unchanged.' : e.message) : 'Review failed. Please retry.');
-    } finally { setBusy(''); }
+    } finally { if (analysis.current === active) { analysis.current = null; setBusy(''); } }
   }
   function preview() {
     draft.pauseSaving();
@@ -197,6 +211,7 @@ export function App() {
       </button>
       <div className="header-right"><span className="edition">A WORKSPACE FOR BETTER JUDGMENT</span><span className="private-pill"><ShieldCheck size={14} /> Private by default</span></div>
     </header>
+    <ProviderAccess providers={providers} />
     {!online && <div className="connectivity" role="status">You’re offline. The example and text editing work; AI and speech require internet. Unsent text is not saved automatically.</div>}
     <main id="main">
       {stage !== 'welcome' && <nav className="journey" aria-label="Review stages">
@@ -236,7 +251,7 @@ export function App() {
       </>}
       {stage === 'material' && <section className="workspace input-workspace">
         <div className="page-heading"><p className="eyebrow">01 / THE MATERIAL</p><h1 tabIndex={-1} ref={heading}>Bring your bet.<br /><em>And what’s behind it.</em></h1><p>Rough is fine. The useful part is separating what you’ve seen from what you hope is true.</p></div>
-        {illustrative && <div className="notice"><Sparkles size={18} /><span>You’re exploring a fictional example. Editing the material switches to live Claude analysis.{providers?.ai && <button className="text-button" onClick={() => setIllustrative(false)} disabled={locked}>Run this example with Claude <ArrowRight size={15} /></button>}</span></div>}
+        {illustrative && <div className="notice"><Sparkles size={18} /><span>You’re exploring a fictional example. Editing the material switches to live Claude analysis.{aiReady && <button className="text-button" onClick={() => setIllustrative(false)} disabled={locked}>Run this example with Claude <ArrowRight size={15} /></button>}</span></div>}
         <div className="input-layout"><div className="material-form">
           <label className="field-label" htmlFor="idea">What’s the product bet?<span>The problem, the people, and the change you have in mind.</span></label>
           <textarea id="idea" ref={ideaField} value={idea} onChange={e => editMaterial(e.target.value, 'idea')} maxLength={4000} rows={5} disabled={!!busy} placeholder="We believe that helping [which people] do [what] will improve [which outcome], because…" />
@@ -247,8 +262,8 @@ export function App() {
           <SpeakInput label="supporting material" onApply={text => appendTranscript(text, 'context')} disabled={!!busy} />
           <div className="field-meta"><span>No uploads or external research. Just what you bring.</span><span>{context.length.toLocaleString()} / 14,000</span></div>
           <div className="draft-consent"><label><input type="checkbox" checked={draft.keeping} onChange={e => draft.choose(e.target.checked)} /><span>Keep this unsent draft on this device</span></label><small>Optional. Saves only the idea and supporting text in this browser. Browser storage is not encrypted. No recordings, answers, reviews, or decisions. Uncheck to delete it; anyone using this browser may read it.</small></div>
-          <div className="form-actions"><button className="button primary" onClick={() => void runClarification()} disabled={locked || (!illustrative && (!online || !providers?.ai))}>{illustrative ? 'Continue with the example' : 'Find the useful questions'}<ArrowRight size={18} /></button><span>{capturing ? 'Add or discard your transcript first.' : 'Up to four questions.'}<br />No endless interview.</span></div>
-          {!illustrative && !providers?.ai && <div className="notice"><CircleHelp size={18} /><span>{statusError || 'Live Claude is not configured. Set ANTHROPIC_API_KEY on the server; the illustrative example is available without it.'}<button className="text-button" onClick={() => void refreshStatus()}>Check connection again</button></span></div>}
+          <div className="form-actions"><button className="button primary" onClick={() => void runClarification()} disabled={locked || (!illustrative && (!online || !aiReady))}>{illustrative ? 'Continue with the example' : 'Find the useful questions'}<ArrowRight size={18} /></button><span>{capturing ? 'Add or discard your transcript first.' : 'Up to four questions.'}<br />No endless interview.</span></div>
+          {!illustrative && !aiReady && <div className="notice"><CircleHelp size={18} /><span>{access.configured.claude ? 'Your tab key cannot be sent from HTTP. Open the HTTPS Studio URL, or remove it to use any host/demo configuration.' : statusError || 'Live Claude is not configured. Add an optional tab key over HTTPS or configure ANTHROPIC_API_KEY on your own server; the illustrative example is available without it.'}<button className="text-button" onClick={() => void refreshStatus()}>Check connection again</button></span></div>}
         </div><aside className="margin-note"><span className="eyebrow">A GOOD BET HAS A CRACK IN IT.</span><h3>What would convince you<br />you’re wrong?</h3><p>That’s not pessimism. It’s how you avoid spending a quarter proving something you could learn in a week.</p><hr /><ShieldCheck size={21} /><h4>Your material stays yours.</h4><p>Nothing is saved by default. Live analysis sends your text to Anthropic; voice sends audio or text to Sarvam. Their data policies apply. We don’t log your material.</p></aside></div>
       </section>}
       {stage === 'clarify' && clarification && <section className="workspace">
@@ -263,7 +278,7 @@ export function App() {
           }} /><div className="field-meta"><span>Blank = unknown, not assumed.</span><span>{(answers[q.id] ?? '').length} / 2,000</span></div></div>
         </article>)}</div>
         {!clarification.questions.length && <div className="notice"><Check size={18} /><span>Your supplied material covers the essential questions. You can correct the interpretation and move to the review.</span></div>}
-        <div className="form-actions"><button className="button primary" onClick={() => void runReview()} disabled={locked || (!illustrative && (!online || !providers?.ai))}>Put the bet under pressure <ArrowRight size={18} /></button><button className="text-button" onClick={() => go('material')} disabled={locked}><ChevronLeft size={17} /> Revisit material</button></div>
+        <div className="form-actions"><button className="button primary" onClick={() => void runReview()} disabled={locked || (!illustrative && (!online || !aiReady))}>Put the bet under pressure <ArrowRight size={18} /></button><button className="text-button" onClick={() => go('material')} disabled={locked}><ChevronLeft size={17} /> Revisit material</button></div>
       </section>}
       {stage === 'review' && result && <section className="workspace review-workspace">
         <div className="review-title"><div><p className="eyebrow">03 / THE REVIEW</p><h1 tabIndex={-1} ref={heading}>{result.title}</h1><p>A thoughtful challenge. Not a verdict.</p></div><div className="review-origin"><span className="status-dot" />{illustrative ? 'ILLUSTRATIVE EXAMPLE' : 'CLAUDE-ASSISTED REVIEW'}<small>Not independently verified</small></div></div>
@@ -326,6 +341,6 @@ export function App() {
         </article>
       </section>}
     </main>
-    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span><div><span>Claude for thinking · Sarvam for voice</span><span>{providers ? `${providers.ai ? 'Claude configured' : 'Claude not configured'} / ${providers.speech ? 'Voice configured' : 'Voice not configured'}` : 'Provider configuration status unavailable'}</span></div><p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
+    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span><div><span>Claude for thinking · Sarvam for voice</span><span>{access.configured.claude ? 'Claude: your tab key' : providers?.ai ? 'Claude: host/demo key' : 'Claude not configured'} / {access.configured.sarvam ? 'Sarvam: your tab key' : providers?.speech ? 'Sarvam: host/demo key' : 'Voice not configured'}</span></div><p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
   </div></VoiceProvider>;
 }

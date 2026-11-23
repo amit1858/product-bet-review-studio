@@ -22,13 +22,16 @@ Do not use tools, browse, or infer private information beyond this material.`;
 export function createClaude(config: Config, fetcher: typeof fetch = fetch) {
   const client = new Anthropic({
     apiKey: config.anthropicKey || 'not-configured',
+    baseURL: 'https://api.anthropic.com',
+    logLevel: 'off',
+    fetchOptions: { redirect: 'error' },
     maxRetries: 0,
     timeout: 70000,
     defaultHeaders: { 'anthropic-version': '2026-10-21' },
     fetch: fetcher,
   });
   async function generate<T extends z.ZodType>(schema: T, prompt: string, input: ReviewInput, signal: AbortSignal, maxTokens: number): Promise<z.infer<T>> {
-    if (!config.anthropicKey) throw new AppError(503, 'ai_not_configured', 'Claude is not configured. Set ANTHROPIC_API_KEY on the server or use the illustrative example.');
+    if (!config.anthropicKey) throw new AppError(503, 'ai_not_configured', 'Claude is not configured. Add a tab key over HTTPS, configure ANTHROPIC_API_KEY on your server, or use the illustrative example.');
     try {
       const response = await client.messages.parse({
         model: config.anthropicModel,
