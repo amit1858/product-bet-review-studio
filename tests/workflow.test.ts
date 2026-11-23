@@ -69,3 +69,14 @@ test('speech chunks respect API limits and preserve mixed-language text and surr
   assert.ok(chunks.every(c => c.length <= 2400 && !/[\uD800-\uDBFF]$/.test(c)));
   assert.equal(chunks.join(' ').replace(/\s+/g, ''), text.replace(/\s+/g, ''));
 });
+
+test('speech chunks prefer sentence boundaries including Hindi punctuation over later spaces', () => {
+  for (const mark of ['.', '?', '!', '।']) {
+    const first = `${'word '.repeat(14).trim()}${mark}`;
+    const text = `${first} ${'more '.repeat(15).trim()}`;
+    const chunks = speechChunks(text, 100);
+    assert.equal(chunks[0], first);
+    assert.ok(chunks.every(chunk => chunk.length <= 100));
+    assert.equal(chunks.join(' '), text);
+  }
+});

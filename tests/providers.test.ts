@@ -103,6 +103,7 @@ test('Sarvam uses current model, codemix or translate, and validates response au
     assert.equal(body.speech_sample_rate, 22050);
     return Response.json({ audios: [wav().toString('base64'), wav(0.5).toString('base64')] });
   });
+
   assert.match((await speech.transcribe(wav(), 'codemix', AbortSignal.timeout(2000))).transcript, /basket/);
   await speech.transcribe(wav(), 'translate', AbortSignal.timeout(2000));
   assert.deepEqual(requestedModes, ['codemix', 'translate']);
@@ -110,4 +111,26 @@ test('Sarvam uses current model, codemix or translate, and validates response au
   await assert.rejects(() => speech.speak({ text: 'A test', language: 'en-IN', voice: 'not-configured', pace: 1 }, AbortSignal.timeout(2000)), /configured voices/);
   const invalid = createSarvam(config(), async () => Response.json({ transcript: ' ' }));
   await assert.rejects(() => invalid.transcribe(wav(), 'codemix', AbortSignal.timeout(2000)), /invalid transcript/);
+});
+
+test('Hindi translation uses the documented model, automatic source detection, bounds and safe failures', async () => {
+  let calls = 0;
+  const speech = createSarvam(config(), async (url, init) => {
+    calls++;
+    assert.equal(String(url), 'https://api.sarvam.ai/translate');
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      input: 'Buy evidence before building.', source_language_code: 'auto', target_language_code: 'hi-IN',
+      model: 'mayura:v1', mode: 'formal', output_script: 'fully-native', numerals_format: 'international',
+    });
+    return Response.json({ translated_text: 'निर्माण से पहले प्रमाण जुटाएँ।', source_language_code: 'en-IN' });
+  });
+  assert.deepEqual(await speech.translate(' Buy evidence before building. ', AbortSignal.timeout(2000)), { text: 'निर्माण से पहले प्रमाण जुटाएँ।' });
+  await assert.rejects(() => speech.translate('x'.repeat(1001), AbortSignal.timeout(2000)));
+  assert.equal(calls, 1);
+  const invalid = createSarvam(config(), async () => Response.json({ translated_text: ' ' }));
+  await assert.rejects(() => invalid.translate('Synthetic example', AbortSignal.timeout(2000)), /invalid Hindi translation/);
+  let failedCalls = 0;
+  const quota = createSarvam(config(), async () => { failedCalls++; return new Response('private diagnostic', { status: 429 }); });
+  await assert.rejects(() => quota.translate('Synthetic example', AbortSignal.timeout(2000)), /quota/);
+  assert.equal(failedCalls, 1);
 });

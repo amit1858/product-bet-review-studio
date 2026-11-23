@@ -7,7 +7,8 @@ import { request, type ProviderStatus } from './api';
 import { RECORDING_LIMIT, recordingToWav, speechChunks } from './audio';
 
 type Settings = { language: 'en-IN' | 'hi-IN'; voice: string; pace: number };
-type Playback = { id: string; label: string; state: 'preparing' | 'playing' };
+type Playback = { id: string; label: string; state: 'translating' | 'preparing' | 'playing' };
+type Replay = { text: string; id: string; label: string };
 type VoiceContextType = {
   enabled: boolean;
   capturing: string | null;
@@ -21,6 +22,7 @@ type VoiceContextType = {
 const VoiceContext = createContext<VoiceContextType | null>(null);
 const transcriptSchema = z.object({ transcript: z.string().trim().min(1).max(8000), language: z.string().nullable() });
 const playbackSchema = z.object({ audios: z.array(z.string().min(1)).min(1) });
+const translationSchema = z.object({ text: z.string().trim().min(1).max(5000) });
 
 function useVoice() {
   const context = useContext(VoiceContext);
@@ -57,6 +59,8 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
   const releaseCapture = useCallback((id: string) => setCapturing(current => current === id ? null : current), []);
   const [playback, setPlayback] = useState<Playback | null>(null);
   const [error, setError] = useState('');
+  const [replay, setReplay] = useState<Replay | null>(null);
+  const [translatedText, setTranslatedText] = useState('');
   const controller = useRef<AbortController | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const cache = useRef<{ key: string; urls: string[] } | null>(null);
@@ -71,6 +75,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
   }, []);
   useEffect(() => { onCaptureChange(!!capturing); }, [capturing, onCaptureChange]);
   useEffect(() => { stop(); }, [sessionKey, online, stop]);
+  useEffect(() => { clearCache(); setReplay(null); setTranslatedText(''); }, [sessionKey, clearCache]);
   useEffect(() => {
     if (providers?.defaultVoice) setSettings(s => ({ ...s, voice: s.voice || providers.defaultVoice }));
   }, [providers?.defaultVoice]);
@@ -80,6 +85,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
     if (!enabled) { setError('Read aloud needs internet and a server-side Sarvam key. The full text remains available.'); return; }
     if (text.length > 18000) { setError('This spoken section is too long. Read the individual findings aloud instead, or shorten your decision rationale.'); return; }
     const active = new AbortController();
+    setReplay({ text, id, label });
     controller.current = active;
     const key = JSON.stringify({ text, settings });
     const pending: string[] = [];
@@ -87,8 +93,26 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
       setPlayback({ id, label, state: 'preparing' });
       let urls = cache.current?.key === key ? cache.current.urls : null;
       if (!urls) {
-        clearCache();
-        for (const chunk of speechChunks(text)) {
+        clearCache(); setTranslatedText('');
+        let spokenText = text;
+        if (settings.language === 'hi-IN') {
+          setPlayback({ id, label, state: 'translating' });
+          const translated: string[] = [];
+          for (const chunk of speechChunks(text, 900)) {
+            const response = translationSchema.safeParse(await request('/api/speech/translate', {
+              method: 'POST', signal: active.signal, headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: chunk }),
+            }));
+            if (active.signal.aborted) return;
+            if (!response.success) throw new Error('No usable Hindi translation was returned. No speech was generated; the written review is unchanged.');
+            translated.push(response.data.text);
+            if (translated.join('\n\n').length > 18000) throw new Error('The Hindi translation is too long for this spoken section. Read individual findings aloud instead; the written review is unchanged.');
+          }
+          spokenText = translated.join('\n\n');
+          setTranslatedText(spokenText);
+          setPlayback({ id, label, state: 'preparing' });
+        }
+        for (const chunk of speechChunks(spokenText)) {
           const response = playbackSchema.parse(await request('/api/speech/speak', {
             method: 'POST', signal: active.signal, headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: chunk, ...settings }),
@@ -113,20 +137,25 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
       if (controller.current === active) { controller.current = null; audio.current = null; setPlayback(null); }
     }
   }, [enabled, settings, stop, clearCache]);
+  function changeSettings(next: Settings) {
+    stop(); clearCache(); setReplay(null); setTranslatedText(''); setError(''); setSettings(next);
+  }
 
   return <VoiceContext.Provider value={{ enabled, capturing, setCapturing, releaseCapture, settings, playback, play, stop }}>
     {children}
     <div className="voice-settings">
       <button className="text-button" onClick={() => setSettingsOpen(v => !v)} aria-expanded={settingsOpen}><Settings2 size={16} /> Voice & playback settings</button>
       {settingsOpen && <section aria-label="Voice settings" className="voice-settings-panel">
-        <div><label htmlFor="spoken-language">Pronunciation (no translation)</label><select id="spoken-language" value={settings.language} onChange={e => { stop(); setSettings(s => ({ ...s, language: e.target.value === 'hi-IN' ? 'hi-IN' : 'en-IN' })); }}><option value="en-IN">English text / English–Hindi mix</option><option value="hi-IN">Hindi text / Hindi–English mix</option></select></div>
-        <div><label htmlFor="voice">Sarvam voice</label><select id="voice" value={settings.voice} onChange={e => { stop(); setSettings(s => ({ ...s, voice: e.target.value })); }}>{(providers?.voices ?? ['shubh_enhi_companion']).map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select></div>
-        <div><label htmlFor="pace">Playback speed</label><select id="pace" value={settings.pace} onChange={e => { stop(); setSettings(s => ({ ...s, pace: Number(e.target.value) })); }}><option value={0.8}>Unhurried · 0.8×</option><option value={1}>Natural · 1×</option><option value={1.2}>Brisk · 1.2×</option></select></div>
-        <p>Read aloud speaks the displayed text as written. Selecting Hindi pronunciation does not turn an English review into Hindi; no text translation is performed. Speech input supports English, Hindi, and mixing, or explicit translation to English. Recording ends after {RECORDING_LIMIT} seconds. Settings and replay audio stay in memory only.</p>
+        <div><label htmlFor="spoken-language">Read-aloud language</label><select id="spoken-language" value={settings.language} onChange={e => changeSettings({ ...settings, language: e.target.value === 'hi-IN' ? 'hi-IN' : 'en-IN' })}><option value="en-IN">As written · English / mixed</option><option value="hi-IN">Hindi · translate before speech</option></select></div>
+        <div><label htmlFor="voice">Sarvam voice</label><select id="voice" value={settings.voice} onChange={e => changeSettings({ ...settings, voice: e.target.value })}>{(providers?.voices ?? ['shubh_enhi_companion']).map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select></div>
+        <div><label htmlFor="pace">Playback speed</label><select id="pace" value={settings.pace} onChange={e => changeSettings({ ...settings, pace: Number(e.target.value) })}><option value={0.8}>Unhurried · 0.8×</option><option value={1}>Natural · 1×</option><option value={1.2}>Brisk · 1.2×</option></select></div>
+        <p>Hindi read-aloud translates selected text with Sarvam before speech. Machine translation may change nuance; the original review, source quotes, PM decision, and exports remain unchanged. Translation adds provider requests, in chunks of up to 900 characters. Speech input supports English, Hindi, mixing, or explicit translation to English. Recording ends after {RECORDING_LIMIT} seconds. Settings, translations, and replay audio stay in memory only.</p>
       </section>}
-      {error && <div className="notice error playback-bar" role="alert"><Volume2 size={18} /><span>{error}</span><button className="icon-button" aria-label="Dismiss playback error" onClick={() => setError('')}><X size={16} /></button></div>}
+      {translatedText && <details className="voice-translation"><summary>Hindi read-aloud text · machine translation</summary><p>The original written review remains the decision record. Check this translation before relying on its wording.</p><p lang="hi">{translatedText}</p></details>}
+      {!playback && replay && !error && <button className="text-button" disabled={!enabled || !!capturing} onClick={() => void play(replay.text, replay.id, replay.label)}><RotateCcw size={14} />{cache.current ? 'Replay last audio' : 'Retry read aloud'}</button>}
+      {error && <div className="notice error playback-bar" role="alert"><Volume2 size={18} /><span>{error}{replay && <button className="text-button" disabled={!enabled || !!capturing} onClick={() => void play(replay.text, replay.id, replay.label)}>{cache.current ? 'Replay prepared audio' : 'Retry read aloud'}</button>}</span><button className="icon-button" aria-label="Dismiss playback error" onClick={() => setError('')}><X size={16} /></button></div>}
     </div>
-    {playback && <div className="playback-bar" role="status"><Volume2 size={20} /><span><strong>{playback.state === 'preparing' ? 'Preparing speech' : 'Reading aloud'}</strong>{playback.label}</span><button className="button secondary" onClick={stop}><Square size={14} /> Stop playback</button></div>}
+    {playback && <div className="playback-bar" role="status"><Volume2 size={20} /><span><strong>{playback.state === 'translating' ? 'Translating to Hindi' : playback.state === 'preparing' ? 'Preparing speech' : 'Reading aloud'}</strong>{playback.label}{settings.language === 'hi-IN' && <small>Machine-translated audio; original record unchanged.</small>}</span><button className="button secondary" onClick={stop}><Square size={14} /> Stop playback</button></div>}
   </VoiceContext.Provider>;
 }
 

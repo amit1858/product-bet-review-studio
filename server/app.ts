@@ -7,7 +7,7 @@ import { inputSchema } from '../shared/schema';
 import { createClaude } from './claude';
 import { type Config, voicesFor } from './config';
 import { AppError } from './errors';
-import { createSarvam, MAX_AUDIO_BYTES, sttOptionsSchema, ttsInputSchema } from './speech';
+import { createSarvam, MAX_AUDIO_BYTES, sttOptionsSchema, translationInputSchema, ttsInputSchema } from './speech';
 
 export type Providers = {
   claude: ReturnType<typeof createClaude>;
@@ -105,6 +105,10 @@ export function createApp(config: Config, providers: Providers = { claude: creat
   app.post('/api/speech/speak', async (req, res) => {
     const input = ttsInputSchema.parse(req.body);
     res.json(await execute(req, res, 45000, signal => providers.speech.speak(input, signal)));
+  });
+  app.post('/api/speech/translate', async (req, res) => {
+    const { text } = translationInputSchema.parse(req.body);
+    res.json(await execute(req, res, 45000, signal => providers.speech.translate(text, signal)));
   });
   app.use('/api', (_req, _res, next) => next(new AppError(404, 'not_found', 'This API route does not exist.')));
   const handler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {

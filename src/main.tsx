@@ -10,12 +10,19 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     void navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(registration => {
       const notify = () => window.dispatchEvent(new Event('studio-update-ready'));
       if (registration.waiting) notify();
-      registration.addEventListener('updatefound', () => {
-        const worker = registration.installing;
-        worker?.addEventListener('statechange', () => {
+      const observe = (worker: ServiceWorker | null) => {
+        if (!worker) return;
+        const changed = () => {
           if (worker.state === 'installed' && navigator.serviceWorker.controller) notify();
-        });
-      });
+          if (worker.state === 'redundant') window.dispatchEvent(new Event(
+            navigator.serviceWorker.controller ? 'studio-update-failed' : 'studio-offline-unavailable',
+          ));
+        };
+        worker.addEventListener('statechange', changed);
+        changed();
+      };
+      registration.addEventListener('updatefound', () => observe(registration.installing));
+      observe(registration.installing);
     }).catch(() => {
       window.dispatchEvent(new Event('studio-offline-unavailable'));
     });

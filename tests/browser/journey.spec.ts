@@ -177,7 +177,7 @@ test('exploring the example cannot overwrite an opted-in personal draft', async 
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('product-bet-studio:opt-in-draft:v1')!).idea)).toBe(personal);
 });
 
-test('playback errors stay visible and pronunciation controls do not promise translation', async ({ page }) => {
+test('playback errors stay visible and Hindi controls describe translation without altering the review', async ({ page }) => {
   await providers(page);
   await page.route('**/api/speech/speak', route => route.fulfill({ json: { audios: [] } }));
   await exampleReview(page);
@@ -186,9 +186,77 @@ test('playback errors stay visible and pronunciation controls do not promise tra
   await expect(page.getByRole('alert')).toBeInViewport();
   await page.getByRole('button', { name: 'Dismiss playback error' }).click();
   await page.getByRole('button', { name: 'Voice & playback settings' }).click();
-  await page.getByLabel('Pronunciation (no translation)').selectOption('hi-IN');
-  await expect(page.getByRole('region', { name: 'Voice settings' })).toContainText('does not turn an English review into Hindi');
+  await page.getByLabel('Read-aloud language').selectOption('hi-IN');
+  await expect(page.getByRole('region', { name: 'Voice settings' })).toContainText('translates selected text with Sarvam before speech');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('Hindi read-aloud translates before TTS and replays prepared audio without more paid requests', async ({ page }) => {
+  await providers(page);
+  const translated = 'प्रमाण जुटाने के बाद ही उत्पाद बनाएँ।';
+  const calls: string[] = [];
+  await page.route('**/api/speech/translate', route => {
+    calls.push('translate');
+    expect(route.request().postDataJSON().text.length).toBeLessThanOrEqual(900);
+    return route.fulfill({ json: { text: translated } });
+  });
+  await page.route('**/api/speech/speak', route => {
+    calls.push('speak');
+    expect(route.request().postDataJSON()).toMatchObject({ text: translated, language: 'hi-IN' });
+    return route.fulfill({ json: { audios: [wav(3).toString('base64')] } });
+  });
+  await exampleReview(page);
+  await page.getByRole('button', { name: 'Voice & playback settings' }).click();
+  await page.getByLabel('Read-aloud language').selectOption('hi-IN');
+  await page.getByRole('button', { name: 'Read aloud: the bet as understood' }).click();
+  await expect(page.locator('.playback-bar')).toContainText('Reading aloud');
+  await expect(page.locator('.bet-summary')).toContainText(sampleReview.bet);
+  await page.getByRole('button', { name: 'Stop playback' }).click();
+  await page.getByRole('button', { name: 'Replay last audio' }).click();
+  await expect(page.locator('.playback-bar')).toContainText('Reading aloud');
+  expect(calls).toEqual(['translate', 'speak']);
+  await page.getByRole('button', { name: 'Stop playback' }).click();
+  await page.locator('.voice-translation summary').click();
+  await expect(page.locator('.voice-translation')).toContainText(translated);
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
+});
+
+test('failed Hindi translation never synthesizes English as Hindi and retries only explicitly', async ({ page }) => {
+  await providers(page);
+  let translations = 0;
+  await page.route('**/api/speech/translate', route => { translations++; return route.fulfill({ json: { text: '' } }); });
+  let spoken = 0;
+  await page.route('**/api/speech/speak', route => { spoken++; return route.fulfill({ json: { audios: [] } }); });
+  await exampleReview(page);
+  await page.getByRole('button', { name: 'Voice & playback settings' }).click();
+  await page.getByLabel('Read-aloud language').selectOption('hi-IN');
+  await page.getByRole('button', { name: 'Read aloud: the bet as understood' }).click();
+  await expect(page.getByRole('alert')).toContainText('No usable Hindi translation');
+  expect(translations).toBe(1);
+  expect(spoken).toBe(0);
+  await page.getByRole('button', { name: 'Retry read aloud' }).click();
+  await expect.poll(() => translations).toBe(2);
+  expect(spoken).toBe(0);
+  await expect(page.locator('.bet-summary')).toContainText(sampleReview.bet);
+});
+
+test('important findings and pre-mortem have grounded read-aloud content', async ({ page }) => {
+  await providers(page);
+  const requested: string[] = [];
+  await page.route('**/api/speech/speak', route => {
+    requested.push(route.request().postDataJSON().text);
+    return route.fulfill({ json: { audios: [wav(3).toString('base64')] } });
+  });
+  await exampleReview(page);
+  await page.getByRole('button', { name: 'Read aloud: evidence 1 and its limitation' }).click();
+  await expect(page.locator('.playback-bar')).toContainText('Reading aloud');
+  await page.getByRole('button', { name: 'Stop playback' }).click();
+  expect(requested[0]).toContain(sampleReview.evidence[0].limitation);
+  await page.getByRole('button', { name: 'Read aloud: pre-mortem path 1' }).click();
+  await expect(page.locator('.playback-bar')).toContainText('Reading aloud');
+  expect(requested[1]).toContain('not a prediction');
+  expect(requested[1]).toContain(sampleReview.premortem[0].signal);
+  await page.getByRole('button', { name: 'Stop playback' }).click();
 });
 
 test('translation retries preserve the recording but require explicit transcript consent', async ({ page }) => {

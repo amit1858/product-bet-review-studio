@@ -35,8 +35,10 @@ export function speechChunks(text: string, limit = 2400): string[] {
   while (remaining.length) {
     if (remaining.length <= limit) { chunks.push(remaining); break; }
     const prefix = remaining.slice(0, limit);
-    const breakAt = Math.max(prefix.lastIndexOf('\n'), prefix.lastIndexOf('. '), prefix.lastIndexOf(' '));
-    let end = breakAt > limit / 2 ? breakAt + 1 : limit;
+    const sentences = [...prefix.matchAll(/[.!?।॥](?:\s|$)|\n/g)];
+    const sentenceEnd = (sentences.at(-1)?.index ?? -1) + 1;
+    const space = prefix.lastIndexOf(' ');
+    let end = sentenceEnd > limit / 2 ? sentenceEnd : space > limit / 2 ? space + 1 : limit;
     const last = remaining.charCodeAt(end - 1);
     if (last >= 0xd800 && last <= 0xdbff) end--;
     chunks.push(remaining.slice(0, end).trim());

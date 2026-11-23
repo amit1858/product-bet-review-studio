@@ -16,6 +16,7 @@ async function serve(overrides: Partial<ReturnType<typeof config>>, run: (url: s
     speech: {
       transcribe: async () => { calls.push('transcribe'); return { transcript: 'Test transcript', language: 'en-IN' }; },
       speak: async () => { calls.push('speak'); return { audios: [wav().toString('base64')] }; },
+      translate: async () => { calls.push('translate'); return { text: 'सिंथेटिक परीक्षण' }; },
     },
   };
   const server = createApp({ ...config(), ...overrides }, providers, true).listen(0, '127.0.0.1');
@@ -76,6 +77,27 @@ test('the process-wide budget applies across provider endpoints', async () => {
     }) });
     assert.equal(response.status, 429); assert.deepEqual(calls, ['clarify']);
   });
+
+});
+
+test('translation is bounded, uncached and limited separately from TTS despite spoofed proxy headers', async () => {
+  await serve({ ipLimit: 2 }, async (url, calls) => {
+    const excessive = await fetch(`${url}/api/speech/translate`, {
+      method: 'POST', headers, body: JSON.stringify({ text: 'x'.repeat(1001) }),
+    });
+    assert.equal(excessive.status, 400);
+    const translated = await fetch(`${url}/api/speech/translate`, {
+      method: 'POST', headers: { ...headers, 'X-Forwarded-For': '203.0.113.1' }, body: JSON.stringify({ text: 'Synthetic test' }),
+    });
+    assert.equal(translated.status, 200);
+    assert.equal(translated.headers.get('cache-control'), 'no-store');
+    const speak = await fetch(`${url}/api/speech/speak`, {
+      method: 'POST', headers: { ...headers, 'X-Forwarded-For': '203.0.113.2' },
+      body: JSON.stringify({ text: 'Synthetic test', language: 'hi-IN', voice: 'shubh_enhi_companion', pace: 1 }),
+    });
+    assert.equal(speak.status, 429);
+    assert.deepEqual(calls, ['translate']);
+  });
 });
 
 test('a disconnected caller cannot free a slot while its provider operation is still pending', async () => {
@@ -85,7 +107,7 @@ test('a disconnected caller cannot free a slot while its provider operation is s
   const admitted = new Promise<void>(resolve => { started = resolve; });
   const providers: Providers = {
     claude: { clarify: async () => { started(); await pending; return sampleClarification; }, review: async () => sampleReview },
-    speech: { transcribe: async () => ({ transcript: 'Test', language: 'en-IN' }), speak: async () => ({ audios: [] }) },
+    speech: { transcribe: async () => ({ transcript: 'Test', language: 'en-IN' }), speak: async () => ({ audios: [] }), translate: async () => ({ text: 'सिंथेटिक परीक्षण' }) },
   };
   const server = createApp({ ...config(), concurrency: 1 }, providers).listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));

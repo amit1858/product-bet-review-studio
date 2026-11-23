@@ -14,9 +14,11 @@ export const ttsInputSchema = z.object({
 export const sttOptionsSchema = z.object({
   mode: z.enum(['codemix', 'translate']),
 }).strict();
+export const translationInputSchema = z.object({ text: z.string().trim().min(1).max(1000) }).strict();
 export type SpeechProvider = {
   transcribe(audio: Buffer, mode: 'codemix' | 'translate', signal: AbortSignal): Promise<{ transcript: string; language: string | null }>;
   speak(input: z.infer<typeof ttsInputSchema>, signal: AbortSignal): Promise<{ audios: string[] }>;
+  translate(text: string, signal: AbortSignal): Promise<{ text: string }>;
 };
 
 function pcmWav(buffer: Buffer): { duration: number; sampleRate: number; channels: number } {
@@ -77,6 +79,7 @@ const transcriptionResponse = z.object({ transcript: z.string().trim().min(1).ma
 const audioResponse = z.object({
   audios: z.array(z.string().min(60).max(8_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/)).min(1).max(10),
 });
+const translationResponse = z.object({ translated_text: z.string().trim().min(1).max(5000) });
 
 export function createSarvam(config: Config, fetcher: typeof fetch = fetch): SpeechProvider {
   async function call(endpoint: string, body: BodyInit, json: boolean, signal: AbortSignal): Promise<unknown> {
@@ -93,6 +96,15 @@ export function createSarvam(config: Config, fetcher: typeof fetch = fetch): Spe
     } catch (error) { throw providerError(error, 'Sarvam'); }
   }
   return {
+    async translate(text, signal) {
+      const input = translationInputSchema.parse({ text }).text;
+      const result = translationResponse.safeParse(await call('translate', JSON.stringify({
+        input, source_language_code: 'auto', target_language_code: 'hi-IN',
+        model: 'mayura:v1', mode: 'formal', output_script: 'fully-native', numerals_format: 'international',
+      }), true, signal));
+      if (!result.success) throw new AppError(502, 'invalid_translation', 'Sarvam returned an empty or invalid Hindi translation. No speech was generated; the written review is unchanged.');
+      return { text: result.data.translated_text };
+    },
     async transcribe(audio, mode, signal) {
       validateWav(audio);
       const form = new FormData();
