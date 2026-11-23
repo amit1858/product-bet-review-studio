@@ -106,6 +106,18 @@ export function validateReviewReferences(review: Review, sources: Source[]): voi
   }
 }
 
+export function leadershipStory(review: Review): { label: string; text: string }[] {
+  const signal = review.evidence[0];
+  return [
+    { label: 'Signal', text: signal ? `"${signal.quote}" [${signal.sourceId}, user-supplied]` : 'No supporting evidence supplied. This is a hypothesis, not validation.' },
+    { label: 'Tension', text: review.challenge.title },
+    { label: 'What the evidence supports', text: signal ? signal.claim : 'No evidence-backed conclusion is available yet.' },
+    { label: 'What it does not establish', text: signal ? signal.limitation : 'Demand, causality, feasibility, and outcomes have not been established by supplied evidence.' },
+    { label: 'Implication', text: `Proposed next learning step: ${review.test.title}. ${review.test.hypothesis} This is a hypothesis to test, not a result.` },
+    { label: 'Decision needed', text: 'Choose whether to proceed, test, reshape, or stop; record your rationale and conditions below. The agent recommendation is advisory.' },
+  ];
+}
+
 export function decisionPack(
   review: Review, decision: Decision, rationale: string, sources: Source[], illustrative: boolean,
 ): string {
@@ -113,6 +125,8 @@ export function decisionPack(
     `# ${review.title}`,
     illustrative ? '**ILLUSTRATIVE EXAMPLE - not live AI analysis or verified research.**' :
       '**AI-assisted review - user-supplied claims are not independently verified.**',
+    '## Leadership story (drawn from this review, not new research)',
+    ...leadershipStory(review).map(beat => `**${beat.label}:** ${beat.text}`),
     '## PM decision',
     `**${decision.toUpperCase()}**`,
     rationale.trim() || 'The PM has not recorded a rationale yet.',

@@ -9,9 +9,11 @@ export default defineConfig({
     enforce: 'post',
     generateBundle(_options, bundle) {
       const template = readFileSync(new URL('./pwa/sw.js', import.meta.url), 'utf8');
-      const paths = [...new Set(['/', '/index.html', '/theme.js', '/manifest.webmanifest', '/icon.svg',
-        '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', ...Object.keys(bundle).map(name => `/${name}`)])];
-      const build = createHash('sha256').update(template + JSON.stringify(bundle)).digest('hex').slice(0, 12);
+      const publicPaths = ['/manifest.webmanifest', '/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png'];
+      const paths = [...new Set(['/', '/index.html', ...publicPaths, ...Object.keys(bundle).map(name => `/${name}`)])];
+      const hash = createHash('sha256').update(template + JSON.stringify(bundle));
+      for (const path of publicPaths) hash.update(path).update(readFileSync(new URL(`./public${path}`, import.meta.url)));
+      const build = hash.digest('hex').slice(0, 12);
       this.emitFile({
         type: 'asset', fileName: 'sw.js',
         source: template.replace('__BUILD_ID__', build).replace('__PRECACHE__', JSON.stringify(paths)),

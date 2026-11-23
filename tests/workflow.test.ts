@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clarificationSchema, decisionPack, inputSchema, reviewSchema, sourcesFor, validateReviewReferences } from '../shared/schema';
+import { clarificationSchema, decisionPack, inputSchema, leadershipStory, reviewSchema, sourcesFor, validateReviewReferences } from '../shared/schema';
 import { speechChunks } from '../src/audio';
 import { sampleClarification } from '../src/sample';
 import { cloneReview, input } from './fixtures';
@@ -42,6 +42,24 @@ test('decision pack preserves a PM disagreement, rationale and source material w
   assert.match(pack, /Agent recommendation \(advisory, not the PM decision\)[\s\S]*TEST/);
   assert.match(pack, /ILLUSTRATIVE EXAMPLE/);
   assert.ok(pack.includes(input.context));
+});
+
+test('leadership story uses supplied quotations and their limitations without inventing validation', () => {
+  const review = cloneReview();
+  const beats = leadershipStory(review);
+  assert.ok(beats[0].text.includes(review.evidence[0].quote));
+  assert.ok(beats[0].text.includes(review.evidence[0].sourceId));
+  assert.equal(beats[2].text, review.evidence[0].claim);
+  assert.equal(beats[3].text, review.evidence[0].limitation);
+  assert.ok(beats[4].text.includes(review.test.hypothesis));
+  assert.match(beats[4].text, /not a result/);
+  const pack = decisionPack(review, 'stop', 'No staffing capacity.', sourcesFor(input), false);
+  for (const beat of beats) assert.ok(pack.includes(beat.text));
+  review.evidence = [];
+  const unsupported = leadershipStory(review).map(beat => beat.text).join('\n');
+  assert.match(unsupported, /No supporting evidence/);
+  assert.match(unsupported, /No evidence-backed conclusion/);
+  assert.ok(!unsupported.includes(beats[0].text));
 });
 
 test('speech chunks respect API limits and preserve mixed-language text and surrogate pairs', () => {

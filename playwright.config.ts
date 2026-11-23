@@ -13,7 +13,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 1000 }, colorScheme: 'light' } },
     { name: 'phone', use: { viewport: { width: 390, height: 844 }, colorScheme: 'light' } },
-    { name: 'dark-phone', use: { viewport: { width: 390, height: 844 }, colorScheme: 'dark' } },
+    { name: 'phone-dark-system', use: { viewport: { width: 390, height: 844 }, colorScheme: 'dark' } },
   ],
   webServer: {
     command: 'npm run start',

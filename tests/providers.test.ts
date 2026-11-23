@@ -47,9 +47,41 @@ test('WAV duration is verified from PCM, not caller metadata', () => {
   assert.equal(validateWav(wav(28)), 28);
   assert.throws(() => validateWav(wav(28.1)), /between/);
   assert.throws(() => validateWav(wav(0.1)), /between/);
-  const stereo = wav(); stereo.writeUInt16LE(2, 22);
+  const stereo = wav(); stereo.writeUInt16LE(2, 22); stereo.writeUInt32LE(64000, 28); stereo.writeUInt16LE(4, 32);
   assert.throws(() => validateWav(stereo), /mono 16kHz/);
   assert.throws(() => validateWav(wav().subarray(0, 100)), /valid WAV/);
+});
+
+test('Sarvam rejects RIFF-shaped corrupt playback and malformed or empty transcripts without leaking content', async () => {
+  for (const buffer of [Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(100)]), wav().subarray(0, 80)]) {
+    const speech = createSarvam(config(), async () => Response.json({ audios: [buffer.toString('base64')] }));
+    await assert.rejects(() => speech.speak({ text: 'Synthetic test', language: 'en-IN', voice: 'shubh_enhi_companion', pace: 1 }, AbortSignal.timeout(2000)), /invalid|corrupt/);
+  }
+  const secretDiagnostic = 'synthetic diagnostic that must not be surfaced';
+  const speech = createSarvam(config(), async () => Response.json({ transcript: { secretDiagnostic } }));
+  await assert.rejects(() => speech.transcribe(wav(), 'translate', AbortSignal.timeout(2000)), error => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /invalid transcript/);
+    assert.ok(!error.message.includes(secretDiagnostic));
+    return true;
+  });
+});
+
+test('Sarvam surfaces quota, configuration, and cancellation without retries', async () => {
+  for (const [status, message] of [[429, /quota/], [422, /configuration/], [403, /authentication/]] as const) {
+    let calls = 0;
+    const speech = createSarvam(config(), async () => { calls++; return new Response('private upstream text', { status }); });
+    await assert.rejects(() => speech.transcribe(wav(), 'codemix', AbortSignal.timeout(2000)), message);
+    assert.equal(calls, 1);
+  }
+  const controller = new AbortController();
+  const speech = createSarvam(config(), async (_url, init) => {
+    assert.equal(init?.signal, controller.signal);
+    controller.abort();
+    throw new DOMException('Aborted', 'AbortError');
+  });
+  await assert.rejects(() => speech.transcribe(wav(), 'codemix', controller.signal), /took too long/);
+  assert.equal(controller.signal.aborted, true);
 });
 
 test('Sarvam uses current model, codemix or translate, and validates response audio', async () => {
@@ -68,12 +100,13 @@ test('Sarvam uses current model, codemix or translate, and validates response au
     assert.equal(body.speaker, 'shubh_enhi_companion');
     assert.equal(body.enable_cached_responses, false);
     assert.equal(body.output_audio_codec, 'wav');
-    return Response.json({ audios: [wav().toString('base64')] });
+    assert.equal(body.speech_sample_rate, 22050);
+    return Response.json({ audios: [wav().toString('base64'), wav(0.5).toString('base64')] });
   });
   assert.match((await speech.transcribe(wav(), 'codemix', AbortSignal.timeout(2000))).transcript, /basket/);
   await speech.transcribe(wav(), 'translate', AbortSignal.timeout(2000));
   assert.deepEqual(requestedModes, ['codemix', 'translate']);
-  assert.equal((await speech.speak({ text: 'A test', language: 'hi-IN', voice: 'shubh_enhi_companion', pace: 1 }, AbortSignal.timeout(2000))).audios.length, 1);
+  assert.equal((await speech.speak({ text: 'A test', language: 'hi-IN', voice: 'shubh_enhi_companion', pace: 1 }, AbortSignal.timeout(2000))).audios.length, 2);
   await assert.rejects(() => speech.speak({ text: 'A test', language: 'en-IN', voice: 'not-configured', pace: 1 }, AbortSignal.timeout(2000)), /configured voices/);
   const invalid = createSarvam(config(), async () => Response.json({ transcript: ' ' }));
   await assert.rejects(() => invalid.transcribe(wav(), 'codemix', AbortSignal.timeout(2000)), /invalid transcript/);

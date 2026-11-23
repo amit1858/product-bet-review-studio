@@ -19,35 +19,55 @@ export type SpeechProvider = {
   speak(input: z.infer<typeof ttsInputSchema>, signal: AbortSignal): Promise<{ audios: string[] }>;
 };
 
-export function validateWav(buffer: Buffer): number {
+function pcmWav(buffer: Buffer): { duration: number; sampleRate: number; channels: number } {
   if (buffer.length < 44 || buffer.toString('ascii', 0, 4) !== 'RIFF' ||
     buffer.toString('ascii', 8, 12) !== 'WAVE' || buffer.readUInt32LE(4) + 8 !== buffer.length) {
     throw new AppError(400, 'invalid_audio', 'Use a new recording. The audio is not a valid WAV file.');
   }
   let formatFound = false;
+  let dataFound = false;
   let bytes = 0;
-  for (let offset = 12; offset + 8 <= buffer.length;) {
+  let sampleRate = 0;
+  let channels = 0;
+  let byteRate = 0;
+  let offset = 12;
+  for (; offset + 8 <= buffer.length;) {
     const type = buffer.toString('ascii', offset, offset + 4);
     const size = buffer.readUInt32LE(offset + 4);
     const start = offset + 8;
     if (start + size > buffer.length) throw new AppError(400, 'invalid_audio', 'The recording is incomplete. Please record again.');
     if (type === 'fmt ') {
-      if (formatFound || size < 16 || buffer.readUInt16LE(start) !== 1 ||
-        buffer.readUInt16LE(start + 2) !== 1 || buffer.readUInt32LE(start + 4) !== 16000 ||
-        buffer.readUInt32LE(start + 8) !== 32000 || buffer.readUInt16LE(start + 12) !== 2 ||
-        buffer.readUInt16LE(start + 14) !== 16) {
-        throw new AppError(400, 'invalid_audio', 'Audio must be mono 16kHz, 16-bit PCM WAV. Record again using the Speak control.');
+      if (formatFound || size < 16 || buffer.readUInt16LE(start) !== 1 || buffer.readUInt16LE(start + 14) !== 16) {
+        throw new AppError(400, 'invalid_audio', 'Audio must be 16-bit PCM WAV. Record again using the Speak control.');
+      }
+      channels = buffer.readUInt16LE(start + 2);
+      sampleRate = buffer.readUInt32LE(start + 4);
+      byteRate = buffer.readUInt32LE(start + 8);
+      if (![1, 2].includes(channels) || ![8000, 16000, 22050, 24000, 32000, 44100, 48000].includes(sampleRate) ||
+        byteRate !== sampleRate * channels * 2 || buffer.readUInt16LE(start + 12) !== channels * 2) {
+        throw new AppError(400, 'invalid_audio', 'The recording has an invalid PCM format. Please record again.');
       }
       formatFound = true;
     }
     if (type === 'data') {
-      if (bytes || size % 2) throw new AppError(400, 'invalid_audio', 'The recording contains invalid audio data.');
+      if (dataFound || !size || size % 2) throw new AppError(400, 'invalid_audio', 'The recording contains invalid audio data.');
+      dataFound = true;
       bytes = size;
     }
     offset = start + size + (size % 2);
   }
-  const duration = bytes / 32000;
-  if (!formatFound || duration < 0.25 || duration > MAX_RECORDING_SECONDS) {
+  if (!formatFound || !dataFound || offset !== buffer.length || bytes % (channels * 2)) {
+    throw new AppError(400, 'invalid_audio', 'The recording is incomplete or empty. Please record again.');
+  }
+  return { duration: bytes / byteRate, sampleRate, channels };
+}
+
+export function validateWav(buffer: Buffer): number {
+  const { duration, sampleRate, channels } = pcmWav(buffer);
+  if (sampleRate !== 16000 || channels !== 1) {
+    throw new AppError(400, 'invalid_audio', 'Audio must be mono 16kHz, 16-bit PCM WAV. Record again using the Speak control.');
+  }
+  if (duration < 0.25 || duration > MAX_RECORDING_SECONDS) {
     throw new AppError(400, 'audio_duration', `Record between 0.25 and ${MAX_RECORDING_SECONDS} seconds. Longer ideas can be added in several turns or typed.`);
   }
   return duration;
@@ -96,8 +116,13 @@ export function createSarvam(config: Config, fetcher: typeof fetch = fetch): Spe
         output_audio_codec: 'wav',
         enable_cached_responses: false,
       }), true, signal));
-      if (!result.success || result.data.audios.some(audio => !Buffer.from(audio, 'base64').subarray(0, 4).equals(Buffer.from('RIFF')))) {
+      if (!result.success) {
         throw new AppError(502, 'invalid_playback', 'Sarvam returned invalid speech audio. The text remains available; retry playback.');
+      }
+      try {
+        for (const encoded of result.data.audios) pcmWav(Buffer.from(encoded, 'base64'));
+      } catch {
+        throw new AppError(502, 'invalid_playback', 'Sarvam returned corrupt or unsupported WAV audio. The text remains available; retry playback.');
       }
       return result.data;
     },

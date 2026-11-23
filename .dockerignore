@@ -6,3 +6,12 @@ dist
 !.env.example
 test-results
 playwright-report
+.mcp.json
+.mcp.local.json
+.vscode
+.github/mcp.json
+.copilot
+.worktrees
+.venv
+*.log
+*.zip

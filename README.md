@@ -17,7 +17,7 @@ Open **http://localhost:3000**. The fictional example works without keys. Live a
 
 ### Server configuration
 
-`.env.example` contains variable names only. Never use `VITE_` variables for secrets, put keys in browser storage, or add a browser BYOK field.
+`.env.example` contains variable names and explanatory comments, with no credentials. Never use `VITE_` variables for secrets, put keys in browser storage, or add a browser BYOK field.
 
 | Variable | Purpose / default |
 | --- | --- |
@@ -33,14 +33,36 @@ Open **http://localhost:3000**. The fictional example works without keys. Live a
 | `MAX_REQUESTS_PER_IP_10_MIN` | `60` combined requests per connection in ten minutes |
 | `MAX_CONCURRENT_REQUESTS` | `4` concurrent API requests |
 
-Restart the server after changing environment variables. Voice, pace, and playback-language controls are available at the bottom of the app and remain in memory only. The language setting guides pronunciation; it does not translate the written review.
+Restart the server after changing environment variables. Voice, pace, and **Pronunciation (no translation)** controls are available at the bottom of the app and remain in memory only. Hindi pronunciation speaks the text as written; it does **not** make an English review Hindi. No text-translation pipeline is implemented. Hindi/English speech input and explicit speech-to-English transcription are separate capabilities.
 
 Provider contracts checked against official documentation during implementation:
 
-- [Sarvam STT](https://docs.sarvam.ai/api-reference/speech-to-text/transcribe): `POST /speech-to-text`, multipart `file`, **`saaras:v4`**, `mode=codemix` or `translate`, `language_code=unknown`. The REST endpoint is intended for turns under 30 seconds.
-- [Sarvam TTS](https://docs.sarvam.ai/api-reference/text-to-speech/convert): `POST /text-to-speech`, **`bulbul:v4-flash`**, `text`, `language_code`, `speaker`, `pace`; up to 2,500 characters. Responses contain base64 WAV audio. Speakers are model-specific.
+- [Sarvam STT](https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/rest-api): `POST /speech-to-text`, multipart `file`, **`saaras:v4`**, `mode=codemix` or `translate`, `language_code=unknown`. Synchronous audio is limited to 30 seconds; this app uses a conservative **28-second** cap. Code-mixing preserves English in Latin script and Hindi in its native script; translate mode produces English.
+- [Sarvam TTS](https://docs.sarvam.ai/api-reference/text-to-speech/convert): `POST /text-to-speech`, **`bulbul:v4-flash`**, `text`, **`language_code` (not `target_language_code`)**, `speaker`, `pace`; up to 2,500 characters per request. This app chunks at 2,400, requests 22,050Hz WAV and disables provider cached responses. Each `audios[]` entry is a separate base64 WAV file, decoded and played in order, never concatenated as encoded strings. WAV headers, PCM format, chunk bounds, and nonempty data are validated before delivery to the browser.
+- [Official voice catalog](https://docs.sarvam.ai/api/api-guides-tutorials/text-to-speech/voices): model-specific lowercase speakers. The current v4-flash API lists `shubh_enhi_companion` (default), `simran_enhi_companion`, and `ishita_enhi_companion`; these are English/Hindi companion voices. Catalog presence is not a live-account or voice-quality test.
 - [Anthropic structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs): Messages API with `output_config.format`, schema validation and API version `2026-10-21`.
 - [Claude models](https://platform.claude.com/docs/en/models/overview): model access and supported contracts can change; check these before substituting a model.
+
+### Development-only Sarvam MCP
+
+The PWA continues to use **direct server-side Sarvam REST**, not MCP. [Sarvam's official MCP](https://docs.sarvam.ai/api/developer-tools/mcp) is a development aid. Its documented Python 3.11+ package is `sarvam-mcp`; after installing it in an isolated environment, the entry point is `sarvam-mcp` (or `uvx sarvam-mcp`). Add it in your MCP client's local stdio settings:
+
+```json
+{
+  "mcpServers": {
+    "sarvam": {
+      "command": "sarvam-mcp",
+      "env": {}
+    }
+  }
+}
+```
+
+Use the isolated environment's absolute executable path if it is not on PATH. The local `.mcp.json` entry prepared during this pass is ignored by git and source archives; import it only into a client supporting this format. It is **not proof the app has loaded or started the server**. Keep keys out of this JSON: inherit `SARVAM_API_KEY` from the developer process's environment or use the package's documented local credential store. Runtime `.env` loading does not automatically configure an MCP client.
+
+**Verification limitation:** local installation was attempted in an isolated environment. The configured package mirror returned HTTP 404 for package metadata; official public wheel downloads then failed TLS handshakes through both pip and Windows HTTPS. A wheel-only mirror fallback got past the metadata error but could not resolve the required `anyio>=4.3` dependency. No TLS safeguards were disabled. Consequently, the package did not start and **no `sarvam_code_*` result was obtained**. Contracts above were checked against official web documentation and non-billable mocked tests, not claimed as MCP builder verification.
+
+Once installation is available, discover schemas first and restrict verification to `sarvam_code_api_reference`, `sarvam_code_languages`, `sarvam_code_speakers`, `sarvam_code_snippet`, `sarvam_code_recommend_model`, and `sarvam_code_validate_request`. Check `saaras:v4` codemix/translate and `bulbul:v4-flash` Hindi/English, exact companion IDs, request/response fields, and duration/text limits. Builder tools are documented as non-billable; **do not invoke `sarvam_tools_*` runtime tools during this pass**. Do not copy developer MCP configs or credentials into the PWA, Docker image, or repository.
 
 ## Product and implementation
 
@@ -50,17 +72,19 @@ The journey is welcome → material → up to four clarification questions → s
 
 The review presents source-linked evidence, limitations, assumptions, unknowns, a falsifiable challenge, proposed failure paths, and a concrete cheap test. Quotes are checked against their declared sources; this verifies **quotation provenance, not the truth of the source or the causal inference**. Generated claims remain explicitly unverified. Test thresholds are proposals, not results.
 
+The final pack includes a concise leadership story: **signal → tension → what evidence supports / does not establish → implication → decision needed**. It reuses the first source-linked signal and its limitation, the existing challenge, and the proposed learning test, without another model call or invented validation. With no evidence, it says so explicitly. The same narrative appears in the UI, Markdown copy/export, and read-aloud. The PM's decision/rationale remain separate from the advisory agent recommendation, including when the PM disagrees.
+
 The example is fictional, pre-authored, and clearly labeled. Its illustrative answers do not adapt to typed clarification responses. Choose **Run this example with Claude** when configured, or edit its material, for live analysis. Correcting its interpretation also switches to live analysis.
 
-The design uses reusable warm-white/charcoal Clawpilot tokens, a single rose accent, serif editorial headings, legible system body fonts, and labeled evidence/risk treatments. It has responsive cards, keyboard focus, 44px controls, and reduced-motion support. Welcome and representative review screens were built and visually inspected before the full flow was applied.
+The design uses product-owned warm-white/charcoal tokens, a single rose accent, serif editorial headings, legible system body fonts, and labeled evidence/risk treatments. **Light mode is unconditional**, including with a dark OS preference; there is no dark-mode toggle, query-string theme switch, builder theme script, or builder branding. It has responsive cards, keyboard focus, 44px controls, reduced-motion support, and safe-area-aware playback controls.
 
 ### Voice behavior
 
 - Tap **Speak** to start; tap **Stop & transcribe** to finish. There is no always-listening or full-duplex mode.
-- Each turn automatically ends at **28 seconds**. Browser-decoded audio is converted to mono 16kHz, 16-bit PCM WAV; the server validates the actual PCM duration and limits upload size.
+- Each turn automatically ends at **28 seconds**, with an explicit notice when capped or shortened. Browser-decoded audio is converted to mono 16kHz, 16-bit PCM WAV; the server validates the actual PCM duration and limits upload size.
 - Default transcription preserves Hindi/English code-mixing. **Translate to English** is an explicit alternative.
 - An editable transcript appears first. The main workflow is blocked until that transcript is added or discarded. Nothing reaches Claude merely because transcription completed.
-- Microphone-denied, processing, empty-transcript, network, retry, and discard states keep text input available.
+- Microphone-denied, processing, empty-transcript, network, retry, and discard states keep text input available. Failed transcription can explicitly retry the in-memory recording; malformed transcripts do not enter the bet. Playback failures stay visible near the viewport rather than being hidden below the review.
 - Read-aloud works on questions, the understood bet, challenge, test, recommendation, and final concise decision record. Stop cancels synthesis/playback; repeat playback reuses the most recent prepared audio in memory.
 - Long speech is split into bounded TTS requests. The spoken final pack intentionally omits full pasted source notes; copy/export includes those sources.
 
@@ -69,6 +93,8 @@ The design uses reusable warm-white/charcoal Clawpilot tokens, a single rose acc
 No accounts, database, analytics, raw request logging, automatic external research, uploads of arbitrary documents, hosted BYOK, or automatic sharing.
 
 Text, reviews, decisions, and audio stay in memory by default. Reloading clears them. The optional **Keep this unsent draft on this device** checkbox stores only idea/context text in localStorage. Saved drafts are not automatically restored; they must be restored or deleted explicitly. Unchecking deletes that draft. Browser storage is not encrypted and is accessible to people using the same browser. Audio is not stored in localStorage or the service-worker cache.
+
+Starting or exploring an example pauses draft saving; the fictional material cannot silently replace a previously opted-in draft.
 
 Live analysis sends material to **Anthropic**. STT sends recorded audio to **Sarvam**; TTS sends selected text to Sarvam. Provider retention, account settings, and policies apply; session-only app behavior is **not a provider zero-retention guarantee**. Use synthetic or permissioned material for the showcase.
 
@@ -98,13 +124,29 @@ When using a container, set `HOST=0.0.0.0` in the environment. Set `APP_ORIGIN` 
 
 Put an HTTPS reverse proxy in front of the Node service and serve the app at the origin root, not under a subpath. Microphone access, installation, service workers, and reliable clipboard support require HTTPS (localhost is the development exception). Disable proxy access/body logging and audio/request buffering to disk. Set provider-side budgets and access controls before opening the URL to attendees.
 
+### Before any future hosted showcase
+
+**No hosting or public exposure was performed in this refinement pass.** The app itself has no login or access gate. A safe future hosting arrangement must fail closed:
+
+- Require an authenticated email allowlist / invitation policy at the HTTPS gateway for **every route, including `/api/*`**, not just the landing page. Deny anonymous users before requests reach Node; verify unauthenticated direct API requests are denied.
+- Keep the Node port private to the gateway (loopback or a private container network). Do not expose a second ungated origin or publish a container port to all interfaces. Only the gateway should be able to reach it.
+- Put secrets in the host's secret environment, set provider-side spending/quota alerts and hard limits where available, and start with one instance and low process-wide limits. In-memory request caps are not money-denominated or durable billing controls.
+- Disable gateway/body/diagnostic recording, disk request buffering, and API response caching. Forward aborts; allow enough upstream time for the bounded 90-second analysis / 45-second speech requests. Use synthetic or permissioned material only.
+- Event Wi-Fi, NAT, and the reverse proxy can pool participants behind a connection limit. Test the actual venue path, keep short turns, account for shared limits, and use the explicit fictional example if connectivity or quota fails; never silently retry a paid call.
+
+The public shell can still be opened from an already installed offline cache after gateway access is revoked. That shell contains no provider credentials or cached reviews/audio. Locally opted-in drafts remain device data; revoking hosted access cannot remotely erase them. The gateway must independently authorize **every live API request**.
+
 ### PWA and offline behavior
 
 The manifest, ordinary/maskable PNG icons, and versioned service worker are included. Install using the browser's install action, or **Share → Add to Home Screen** on supported mobile browsers.
 
 Production builds precache the public shell and hashed static assets. API responses, audio, and user context are never cached. After an initial online visit, the welcome/example and text editing can work offline. **AI and speech do not work offline.** Unsent text is retained only with explicit device-draft consent.
 
-The service worker does not force an update/reload while a PM is working. New releases activate after old tabs close. If the installation fails, the UI explicitly warns that offline access is unavailable.
+The service worker does not force an update/reload while a PM is working. A waiting-version notice asks the PM to finish/export, close all Studio tabs, and reopen. Build IDs include public manifest/icon content as well as compiled assets. Cache lookups are scoped to the current release; navigation falls back only on a network failure, never on a gateway's 401/403 or other HTTP error. `/api` and `/api/*`, non-GET traffic, and unlisted media are not intercepted. If installation fails, the UI explicitly warns that offline access is unavailable.
+
+### Source/archive hygiene
+
+Local MCP/editor tooling, virtual environments, worktree metadata, real `.env` files, dependencies, build output, logs, and test reports are excluded from source archives and/or Docker contexts with `.gitignore`, `.gitattributes`, and `.dockerignore`. `.env.example`, source, tests, documentation, and the npm lockfile remain in the source archive. Git archives exclude **tracked** paths only; inspect any ad-hoc ZIP separately. Never archive the whole working directory or a developer's home/config directory as a release.
 
 ## Checks
 
@@ -117,9 +159,20 @@ npm run test:e2e
 
 Unit/integration tests cover structured output, exact source quotes, unsupported references, duplicate decisions, missing configuration, provider errors, audio duration, current Sarvam request fields, origin checks, payload bounds, and request limits.
 
-Production browser tests cover desktop, phone and dark phone layouts; readable text/action contrast; human/agent decision separation; download; live-workflow retry and invalidation; consented mixed-language transcripts; denied microphones; stop/replay; opt-in draft restoration; and real offline service-worker behavior. Provider responses in automated tests are explicitly mocked; no paid calls are made.
+Production browser tests cover desktop and phone layouts (including dark OS preferences with an always-light app); readable text/action contrast; grounded leadership narrative and human/agent decision separation; download; live-workflow retry and invalidation; consented mixed-language/translated transcripts; denied microphones and capped recordings; stop/replay and visible playback errors; draft isolation/restoration; and real offline service-worker behavior. Unit tests also exercise cache/auth boundaries and corrupt WAV rejection. Provider responses in automated tests are explicitly mocked; no paid calls are made.
 
 **Before a live showcase, perform a real Claude request and real Hindi/English STT and TTS with the deployed keys.** Automated fixtures cannot verify account access, billing, model availability, regional latency, transcription quality, or the selected voice. Container deployment and physical iOS/Android installation also require host/device checks.
+
+### Manual next-pass checklist
+
+- [ ] Resolve the local package-download/TLS issue without disabling verification; launch Sarvam MCP, discover schemas, and run only the builder checks listed above. Record any documentation discrepancy before changing runtime contracts.
+- [ ] Check welcome → material → clarification → review → decision pack on narrow Android/iOS and desktop, with system dark mode enabled, keyboard navigation, long Hindi/English text, and device safe areas.
+- [ ] Start with missing keys and confirm the explicit example/unavailable states. Use synthetic material to check correction/invalidation, unknown answers, no-evidence narrative, and a PM decision that differs from the agent. Confirm copy/download includes the unchanged rationale and full sources.
+- [ ] After **separate approval for paid calls**, test one real Claude clarification/review and short English, Hindi, and mixed-language STT; verify explicit English-translation mode, edited transcript consent, retry/discard, the 28-second limit, and no duplicate calls on failure.
+- [ ] After the same separate approval, check catalog-selected TTS voices, Hindi/English pronunciation, all returned WAV segments, blocked autoplay, stop/abort/replay, and long-text chunking. Do not present pronunciation selection as translation.
+- [ ] On physical devices, test microphone-denied/unavailable/interrupted states, install icons, airplane-mode shell/example, explicit unencrypted draft restore/delete, and failed/slow networks. Confirm API/text/audio are absent from Cache Storage.
+- [ ] With two local app versions, test an actual waiting service worker: the notice must not reload an active review; close all tabs, reopen, and confirm the new shell and cache cleanup. The automated notice test does not substitute for this physical lifecycle check.
+- [ ] Only after separately approving a hosted deployment, verify the gateway deny/allow list, private origin, API authorization, provider spending controls, request logging disabled, venue Wi-Fi limits, and secret-free Docker/source archives.
 
 ## 45-minute demo runbook
 

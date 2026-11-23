@@ -6,3 +6,12 @@ dist/
 playwright-report/
 test-results/
 *.tsbuildinfo
+.mcp.json
+.mcp.local.json
+.vscode/mcp.json
+.github/mcp.json
+.copilot/
+.worktrees/
+.venv/
+*.log
+*.zip

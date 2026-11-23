@@ -19,7 +19,7 @@ type VoiceContextType = {
   stop: () => void;
 };
 const VoiceContext = createContext<VoiceContextType | null>(null);
-const transcriptSchema = z.object({ transcript: z.string().min(1), language: z.string().nullable() });
+const transcriptSchema = z.object({ transcript: z.string().trim().min(1).max(8000), language: z.string().nullable() });
 const playbackSchema = z.object({ audios: z.array(z.string().min(1)).min(1) });
 
 function useVoice() {
@@ -105,7 +105,9 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
       setPlayback({ id, label, state: 'playing' });
       for (const url of urls) await playAudio(url, active.signal, value => { audio.current = value; });
     } catch (e) {
-      if (!active.signal.aborted) setError(e instanceof Error ? e.message : 'Speech playback failed. Please retry.');
+      if (!active.signal.aborted) setError(e instanceof z.ZodError
+        ? 'The speech response was invalid. Your text is unchanged; retry playback.'
+        : e instanceof Error ? e.message : 'Speech playback failed. Please retry.');
     } finally {
       if (cache.current?.urls !== pending) pending.forEach(url => URL.revokeObjectURL(url));
       if (controller.current === active) { controller.current = null; audio.current = null; setPlayback(null); }
@@ -117,12 +119,12 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
     <div className="voice-settings">
       <button className="text-button" onClick={() => setSettingsOpen(v => !v)} aria-expanded={settingsOpen}><Settings2 size={16} /> Voice & playback settings</button>
       {settingsOpen && <section aria-label="Voice settings" className="voice-settings-panel">
-        <div><label htmlFor="spoken-language">Playback language</label><select id="spoken-language" value={settings.language} onChange={e => { stop(); setSettings(s => ({ ...s, language: e.target.value === 'hi-IN' ? 'hi-IN' : 'en-IN' })); }}><option value="en-IN">English / mixed</option><option value="hi-IN">Hindi / mixed</option></select></div>
+        <div><label htmlFor="spoken-language">Pronunciation (no translation)</label><select id="spoken-language" value={settings.language} onChange={e => { stop(); setSettings(s => ({ ...s, language: e.target.value === 'hi-IN' ? 'hi-IN' : 'en-IN' })); }}><option value="en-IN">English text / English–Hindi mix</option><option value="hi-IN">Hindi text / Hindi–English mix</option></select></div>
         <div><label htmlFor="voice">Sarvam voice</label><select id="voice" value={settings.voice} onChange={e => { stop(); setSettings(s => ({ ...s, voice: e.target.value })); }}>{(providers?.voices ?? ['shubh_enhi_companion']).map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select></div>
         <div><label htmlFor="pace">Playback speed</label><select id="pace" value={settings.pace} onChange={e => { stop(); setSettings(s => ({ ...s, pace: Number(e.target.value) })); }}><option value={0.8}>Unhurried · 0.8×</option><option value={1}>Natural · 1×</option><option value={1.2}>Brisk · 1.2×</option></select></div>
-        <p>Language guides pronunciation; it does not translate the written analysis. Recording is always started by you and ends after {RECORDING_LIMIT} seconds. Settings and replay audio are held in memory only.</p>
+        <p>Read aloud speaks the displayed text as written. Selecting Hindi pronunciation does not turn an English review into Hindi; no text translation is performed. Speech input supports English, Hindi, and mixing, or explicit translation to English. Recording ends after {RECORDING_LIMIT} seconds. Settings and replay audio stay in memory only.</p>
       </section>}
-      {error && <div className="notice error" role="alert"><Volume2 size={18} /><span>{error}</span><button className="icon-button" aria-label="Dismiss playback error" onClick={() => setError('')}><X size={16} /></button></div>}
+      {error && <div className="notice error playback-bar" role="alert"><Volume2 size={18} /><span>{error}</span><button className="icon-button" aria-label="Dismiss playback error" onClick={() => setError('')}><X size={16} /></button></div>}
     </div>
     {playback && <div className="playback-bar" role="status"><Volume2 size={20} /><span><strong>{playback.state === 'preparing' ? 'Preparing speech' : 'Reading aloud'}</strong>{playback.label}</span><button className="button secondary" onClick={stop}><Square size={14} /> Stop playback</button></div>}
   </VoiceContext.Provider>;
@@ -185,7 +187,10 @@ export function SpeakInput({ label, onApply, disabled = false }: {
       if (mounted.current && !active.signal.aborted) { setTranscript(response.transcript); setState('transcript'); }
     } catch (e) {
       if (mounted.current && !active.signal.aborted) {
-        setError(e instanceof Error ? e.message : 'Transcription failed. Retry or type your answer.'); setState('error'); voice.releaseCapture(id);
+        setError(e instanceof z.ZodError
+          ? 'No usable transcript was returned. Retry this recording, record again, or type your answer.'
+          : e instanceof Error ? e.message : 'Transcription failed. Retry or type your answer.');
+        setState('error'); voice.releaseCapture(id);
       }
     } finally { if (controller.current === active) controller.current = null; }
   }
@@ -213,7 +218,7 @@ export function SpeakInput({ label, onApply, disabled = false }: {
         try {
           const wav = await recordingToWav(new Blob(chunks, { type: rec.mimeType }));
           if (!mounted.current || cancelled.current || generation.current !== attempt) return;
-          recording.current = wav.audio; setTrimmed(wav.trimmed); await transcribe(wav.audio);
+          recording.current = wav.audio; setTrimmed(current => current || wav.trimmed); await transcribe(wav.audio);
         } catch (e) {
           if (mounted.current && !cancelled.current && generation.current === attempt) {
             setError(e instanceof Error ? e.message : 'This browser could not process the recording. Text input remains available.'); setState('error'); voice.releaseCapture(id);
@@ -225,7 +230,7 @@ export function SpeakInput({ label, onApply, disabled = false }: {
       timer.current = setInterval(() => {
         const elapsed = Math.floor((performance.now() - started) / 1000);
         setSeconds(Math.min(elapsed, RECORDING_LIMIT));
-        if (elapsed >= RECORDING_LIMIT && rec.state === 'recording') rec.stop();
+        if (elapsed >= RECORDING_LIMIT && rec.state === 'recording') { setTrimmed(true); rec.stop(); }
       }, 200);
     } catch (e) {
       if (!mounted.current || cancelled.current || generation.current !== attempt) return;
@@ -241,7 +246,7 @@ export function SpeakInput({ label, onApply, disabled = false }: {
   function discard() {
     cancelled.current = true; generation.current++; controller.current?.abort();
     if (recorder.current?.state === 'recording') recorder.current.stop();
-    release(); recording.current = null; setTranscript(''); setState('idle'); setError(''); voice.releaseCapture(id);
+    release(); recording.current = null; setTranscript(''); setTrimmed(false); setState('idle'); setError(''); voice.releaseCapture(id);
   }
   function apply() {
     if (onApply(transcript.trim())) discard();
@@ -255,11 +260,12 @@ export function SpeakInput({ label, onApply, disabled = false }: {
       {['idle', 'error'].includes(state) && <label className="speech-mode"><span className="sr-only">Transcription mode for {label}</span><select value={mode} onChange={e => setMode(e.target.value === 'translate' ? 'translate' : 'codemix')} disabled={!!voice.capturing || disabled}><option value="codemix">Keep mixed language</option><option value="translate">Translate to English</option></select></label>}
       {['permission', 'recording', 'processing', 'transcript'].includes(state) && <button className="text-button" onClick={discard}>Discard</button>}
     </div>
-    {state === 'idle' && <small>{!supported ? 'Microphone is unavailable in this browser. Text input is fully supported.' : !voice.enabled ? 'Voice requires internet and server-side Sarvam configuration. You can keep typing.' : 'Tap to start, tap to finish. Up to 28 seconds. No background recording.'}</small>}
+    {state === 'idle' && <small>{!supported ? 'Microphone is unavailable in this browser. Text input is fully supported.' : !voice.enabled ? 'Voice requires internet and server-side Sarvam configuration. You can keep typing.' : 'English, Hindi, or both. Tap to start, tap to finish. Up to 28 seconds. No background recording.'}</small>}
+    {trimmed && <p className="recording-limit" role="status">This turn was limited to its first 28 seconds. Add another turn for anything beyond that.</p>}
     {state === 'permission' && <p role="status">Waiting for microphone permission. Nothing is recording yet.</p>}
     {state === 'recording' && <p role="status"><span className="record-dot" /> Recording · {RECORDING_LIMIT - seconds}s remaining. Audio goes to Sarvam when you finish; not to Claude.</p>}
     {state === 'processing' && <p role="status"><span className="spinner" /> Preparing your editable transcript…</p>}
     {state === 'error' && <div role="alert"><p>{error}</p>{recording.current && <button className="text-button" disabled={!voice.enabled || !!voice.capturing} onClick={() => { if (recording.current) void transcribe(recording.current); }}><RotateCcw size={14} /> Retry this recording</button>}<button className="text-button" onClick={discard}>Discard recording & use text</button></div>}
-    {state === 'transcript' && <div className="transcript-review"><label className="field-label" htmlFor={`${id}-transcript`}>Review your transcript<span>Nothing reaches the analysis until you choose to add this text.</span></label><textarea id={`${id}-transcript`} rows={4} value={transcript} onChange={e => setTranscript(e.target.value)} maxLength={8000} />{trimmed && <small>The recording was limited to its first 28 seconds. Add another turn for anything beyond that.</small>}{error && <p role="alert">{error}</p>}<button className="button secondary" onClick={apply} disabled={!transcript.trim()}>Add transcript to {label} <Play size={14} /></button></div>}
+    {state === 'transcript' && <div className="transcript-review"><label className="field-label" htmlFor={`${id}-transcript`}>Review your {mode === 'translate' ? 'English translation' : 'mixed-language transcript'}<span>Nothing reaches the analysis until you choose to add this text.</span></label><textarea id={`${id}-transcript`} rows={4} value={transcript} onChange={e => setTranscript(e.target.value)} maxLength={8000} />{error && <p role="alert">{error}</p>}<button className="button secondary" onClick={apply} disabled={!transcript.trim()}>Add transcript to {label} <Play size={14} /></button></div>}
   </div>;
 }

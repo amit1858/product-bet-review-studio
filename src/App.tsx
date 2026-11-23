@@ -4,7 +4,7 @@ import {
   FileText, FlaskConical, Layers3, Mic, ShieldCheck, Sparkles, X,
 } from 'lucide-react';
 import {
-  decisions, decisionPack, inputSchema, sourcesFor, type Clarification,
+  decisionPack, inputSchema, leadershipStory, sourcesFor, type Clarification,
   type Decision, type Review, type ReviewInput,
 } from '../shared/schema';
 import * as api from './api';
@@ -59,6 +59,7 @@ export function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [providers, setProviders] = useState<api.ProviderStatus | null>(null);
   const [statusError, setStatusError] = useState('');
+  const [updateReady, setUpdateReady] = useState(false);
   const draft = useDraft(idea, context);
   const heading = useRef<HTMLHeadingElement>(null);
   const ideaField = useRef<HTMLTextAreaElement>(null);
@@ -67,19 +68,22 @@ export function App() {
     try {
       setProviders(api.statusSchema.parse(await api.request('/api/status')));
       setStatusError('');
-    } catch { setStatusError('Server status unavailable. Live features may not be ready.'); }
+    } catch { setProviders(null); setStatusError('Server status unavailable. Live features may not be ready.'); }
   }
   useEffect(() => {
     void refreshStatus();
     const on = () => { setOnline(true); void refreshStatus(); };
     const off = () => setOnline(false);
     const unavailable = () => setError('Offline installation could not be enabled in this browser. The Studio works online; do not rely on offline access.');
+    const updated = () => setUpdateReady(true);
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
     window.addEventListener('studio-offline-unavailable', unavailable);
+    window.addEventListener('studio-update-ready', updated);
     return () => {
       window.removeEventListener('online', on); window.removeEventListener('offline', off);
       window.removeEventListener('studio-offline-unavailable', unavailable);
+      window.removeEventListener('studio-update-ready', updated);
     };
   }, []);
   useEffect(() => {
@@ -137,6 +141,7 @@ export function App() {
     } finally { setBusy(''); }
   }
   function preview() {
+    draft.pauseSaving();
     setIdea(sampleIdea); setContext(sampleContext); setIllustrative(true);
     setClarification(sampleClarification); setUnderstanding(sampleClarification.bet);
     setAnswers({}); setResult(sampleReview); setDecision(null); setRationale('');
@@ -145,9 +150,11 @@ export function App() {
   }
   const sources = reviewInput ? sourcesFor(reviewInput) : [];
   const pack = result && decision ? decisionPack(result, decision, rationale, sources, illustrative) : '';
+  const story = result ? leadershipStory(result) : [];
   const spokenPack = result && decision ? [
     illustrative ? 'Illustrative example. Not verified research.' : 'AI-assisted review. Not independently verified.',
     result.title, `The PM's decision: ${decision}.`, `The PM's rationale: ${rationale}`,
+    ...story.map(beat => `${beat.label}: ${beat.text}`),
     `The bet: ${result.bet}`,
     `Agent recommendation, advisory only: ${result.recommendation.decision}. ${result.recommendation.confidence} confidence. ${result.recommendation.basis}`,
     `Key risk: ${result.challenge.title} ${result.challenge.invalidatedBy}`,
@@ -190,10 +197,11 @@ export function App() {
     {!online && <div className="connectivity" role="status">You’re offline. The example and text editing work; AI and speech require internet. Unsent text is not saved automatically.</div>}
     <main id="main">
       {stage !== 'welcome' && <nav className="journey" aria-label="Review stages">
-        {([{ s: 'material', n: '01', label: 'The material', enabled: true }, { s: 'clarify', n: '02', label: 'The questions', enabled: !!clarification }, { s: 'review', n: '03', label: 'The review', enabled: !!result }, { s: 'pack', n: '04', label: 'Your decision', enabled: !!decision }] as const).map(item =>
+        {([{ s: 'material', n: '01', label: 'The material', enabled: true }, { s: 'clarify', n: '02', label: 'The questions', enabled: !!clarification }, { s: 'review', n: '03', label: 'The review', enabled: !!result }, { s: 'pack', n: '04', label: 'Your decision', enabled: !!decision && !!rationale.trim() }] as const).map(item =>
           <button key={item.s} className={stage === item.s ? 'current' : ''} disabled={!item.enabled || locked} onClick={() => go(item.s)} aria-current={stage === item.s ? 'step' : undefined}><span>{item.n}</span>{item.label}</button>)}
       </nav>}
       {error && <ErrorNotice message={error} dismiss={() => setError('')} />}
+      {updateReady && <div className="notice" role="status"><Sparkles size={18} /><span>A new Studio version is ready. Finish and export your decision, then close all Studio tabs and reopen. We won’t reload or discard your work automatically.</span></div>}
       {feedback && <div className="notice" role="status"><Check size={18} /><span>{feedback}</span></div>}
       {draft.error && <div className="notice error" role="alert"><ShieldCheck size={18} /><span>{draft.error}</span><button className="text-button" onClick={draft.forget}>Delete stored draft</button></div>}
       {draft.saved && !draft.keeping && (stage === 'welcome' || stage === 'material') && <div className="notice"><FileText size={18} /><span>You previously chose to keep a draft on this device. It has not been submitted or automatically restored.</span><button className="text-button" onClick={restoreDraft} disabled={locked}>Restore draft</button><button className="text-button" onClick={draft.forget}>Delete</button></div>}
@@ -235,7 +243,7 @@ export function App() {
           <textarea id="context" value={context} onChange={e => editMaterial(e.target.value, 'context')} maxLength={14000} rows={9} disabled={!!busy} placeholder={'Customer feedback: “…” — from three interviews last week\nMetrics: … — from our funnel report\nConstraints: …\nWhat we don’t know yet: …'} />
           <SpeakInput label="supporting material" onApply={text => appendTranscript(text, 'context')} disabled={!!busy} />
           <div className="field-meta"><span>No uploads or external research. Just what you bring.</span><span>{context.length.toLocaleString()} / 14,000</span></div>
-          <div className="draft-consent"><label><input type="checkbox" checked={draft.keeping} onChange={e => draft.choose(e.target.checked)} /><span>Keep this unsent draft on this device</span></label><small>Optional. Saves only the idea and supporting text in this browser. No recordings, answers, reviews, or decisions. Uncheck to delete it; anyone using this browser may read it.</small></div>
+          <div className="draft-consent"><label><input type="checkbox" checked={draft.keeping} onChange={e => draft.choose(e.target.checked)} /><span>Keep this unsent draft on this device</span></label><small>Optional. Saves only the idea and supporting text in this browser. Browser storage is not encrypted. No recordings, answers, reviews, or decisions. Uncheck to delete it; anyone using this browser may read it.</small></div>
           <div className="form-actions"><button className="button primary" onClick={() => void runClarification()} disabled={locked || (!illustrative && (!online || !providers?.ai))}>{illustrative ? 'Continue with the example' : 'Find the useful questions'}<ArrowRight size={18} /></button><span>{capturing ? 'Add or discard your transcript first.' : 'Up to four questions.'}<br />No endless interview.</span></div>
           {!illustrative && !providers?.ai && <div className="notice"><CircleHelp size={18} /><span>{statusError || 'Live Claude is not configured. Set ANTHROPIC_API_KEY on the server; the illustrative example is available without it.'}<button className="text-button" onClick={() => void refreshStatus()}>Check connection again</button></span></div>}
         </div><aside className="margin-note"><span className="eyebrow">A GOOD BET HAS A CRACK IN IT.</span><h3>What would convince you<br />you’re wrong?</h3><p>That’s not pessimism. It’s how you avoid spending a quarter proving something you could learn in a week.</p><hr /><ShieldCheck size={21} /><h4>Your material stays yours.</h4><p>Nothing is saved by default. Live analysis sends your text to Anthropic; voice sends audio or text to Sarvam. Their data policies apply. We don’t log your material.</p></aside></div>
@@ -270,7 +278,36 @@ export function App() {
         <section id="test" className="test-canvas"><div className="test-heading"><FlaskConical size={27} /><div><span className="eyebrow">04 / THE CHEAPEST MEANINGFUL TEST</span><h2>{result.test.title}</h2></div><span className="test-tag">PROPOSED · NOT RUN</span></div><p className="test-hypothesis">{result.test.hypothesis}</p><ReadAloud text={`Proposed test, not run. ${result.test.title}\n${result.test.method}\nContinue if: ${result.test.success}\nStop if: ${result.test.stop}`} label="the proposed test" /><div className="test-method"><span className="card-label">HOW TO LEARN</span><p>{result.test.method}</p></div><div className="test-criteria"><div><span className="card-label evidence-label">A REASON TO CONTINUE</span><p>{result.test.success}</p></div><div><span className="card-label">A REASON TO STOP OR RESHAPE</span><p>{result.test.stop}</p></div></div><div className="test-footer"><span><strong>Timebox</strong>{result.test.timebox}</span><span><strong>Estimated effort</strong>{result.test.cost}</span></div></section>
         <section id="decision" className="decision-section"><div className="section-title"><span className="section-number">05</span><div><h2>The agent advises. You decide.</h2><p>The recommendation is a starting point. Your decision is the record.</p></div></div><div className="recommendation"><span className="eyebrow">AGENT RECOMMENDATION</span><div><strong>{labels[result.recommendation.decision]}</strong><span className="confidence">{result.recommendation.confidence} confidence</span></div><p>{result.recommendation.basis}</p><ReadAloud text={`Agent recommendation, advisory only: ${result.recommendation.decision}. ${result.recommendation.confidence} confidence. ${result.recommendation.basis}\nWould change if: ${result.recommendation.wouldChangeIf}`} label="the agent recommendation" /><details><summary>What would change this recommendation?</summary><p>{result.recommendation.wouldChangeIf}</p></details></div><fieldset className="decision-options"><legend>Your next move</legend>{result.options.map(o => <label key={o.decision} className={`decision-option ${decision === o.decision ? 'selected' : ''}`}><input type="radio" name="decision" value={o.decision} checked={decision === o.decision} onChange={() => setDecision(o.decision)} /><span className="radio-mark">{decision === o.decision && <Check size={14} />}</span><strong>{labels[o.decision]}</strong><span>{descriptions[o.decision]}</span><p>{o.rationale}</p></label>)}</fieldset><label className="field-label" htmlFor="rationale">Why this decision?<span>Your reasoning, conditions, and what should happen next. This is your voice, not the agent’s.</span></label><textarea id="rationale" value={rationale} onChange={e => setRationale(e.target.value)} rows={4} maxLength={3000} placeholder="I’m choosing this direction because… We’ll reconsider if…" /><div className="form-actions"><button className="button primary" disabled={!decision || !rationale.trim()} onClick={() => go('pack')}>Create my decision pack <ArrowRight size={18} /></button><span>Select a direction and record your rationale.<br />No decision is made for you.</span></div></section>
       </section>}
-      {stage === 'pack' && result && decision && <section className="workspace pack-workspace"><div className="page-heading"><p className="eyebrow">04 / YOUR DECISION PACK</p><h1 tabIndex={-1} ref={heading}>A decision worth<br /><em>putting on the table.</em></h1><p>Ready for a team conversation. Nothing is published automatically.</p></div><div className="pack-actions"><button className="button primary" onClick={() => void copyPack()}><Clipboard size={17} /> Copy pack</button><button className="button secondary" onClick={downloadPack}><Download size={17} /> Export Markdown</button><ReadAloud text={spokenPack} label="the final decision pack" /><button className="text-button" onClick={() => go('review')}>Edit decision <ArrowUpRight size={16} /></button></div><article className="decision-document"><div className="document-masthead"><span>PRODUCT BET / DECISION RECORD</span><span>{illustrative ? 'ILLUSTRATIVE EXAMPLE' : 'AI-ASSISTED · UNVERIFIED'}</span></div><h2>{result.title}</h2><div className="human-decision"><span className="eyebrow">THE PM’S DECISION</span><h3>{labels[decision]}</h3><p>{rationale}</p></div><div className="document-section"><h3>The bet</h3><p>{result.bet}</p></div><div className="document-section"><h3>Agent recommendation · advisory</h3><p><strong>{labels[result.recommendation.decision]}</strong> · {result.recommendation.confidence} confidence</p><p>{result.recommendation.basis}</p></div><div className="document-section"><h3>The risk we are accepting</h3><p>{result.challenge.title}</p><p>{result.challenge.invalidatedBy}</p></div><div className="document-section"><h3>The next useful test · proposed</h3><p>{result.test.method}</p><p><strong>Continue if:</strong> {result.test.success}</p><p><strong>Stop or reshape if:</strong> {result.test.stop}</p><p>{result.test.timebox} · {result.test.cost}</p></div><details className="full-pack"><summary>Full pack with evidence, assumptions, pre-mortem & source material</summary><pre>{pack}</pre></details><div className="document-footer"><ShieldCheck size={17} /><span>PM-owned decision. Source-linked analysis. No automatic sharing.</span></div></article></section>}
+      {stage === 'pack' && result && decision && <section className="workspace pack-workspace">
+        <div className="page-heading">
+          <p className="eyebrow">04 / YOUR DECISION PACK</p>
+          <h1 tabIndex={-1} ref={heading}>A decision worth<br /><em>putting on the table.</em></h1>
+          <p>Ready for a team conversation. Nothing is published automatically.</p>
+        </div>
+        <div className="pack-actions">
+          <button className="button primary" onClick={() => void copyPack()}><Clipboard size={17} /> Copy pack</button>
+          <button className="button secondary" onClick={downloadPack}><Download size={17} /> Export Markdown</button>
+          <ReadAloud text={spokenPack} label="the final decision pack" />
+          <button className="text-button" onClick={() => go('review')}>Edit decision <ArrowUpRight size={16} /></button>
+        </div>
+        <article className="decision-document">
+          <div className="document-masthead"><span>PRODUCT BET / DECISION RECORD</span><span>{illustrative ? 'ILLUSTRATIVE EXAMPLE' : 'AI-ASSISTED · UNVERIFIED'}</span></div>
+          <h2>{result.title}</h2>
+          <section className="leadership-story" aria-label="Leadership story">
+            <h3>The story for the room</h3>
+            <p>Drawn from this review—not new research or independent verification.</p>
+            {story.map(beat => <div className="story-beat" key={beat.label}><h4>{beat.label}</h4><p>{beat.text}</p></div>)}
+            <ReadAloud text={story.map(beat => `${beat.label}: ${beat.text}`).join('\n\n')} label="the leadership story" />
+          </section>
+          <div className="human-decision"><span className="eyebrow">THE PM’S DECISION</span><h3>{labels[decision]}</h3><p>{rationale}</p></div>
+          <div className="document-section"><h3>The bet</h3><p>{result.bet}</p></div>
+          <div className="document-section"><h3>Agent recommendation · advisory</h3><p><strong>{labels[result.recommendation.decision]}</strong> · {result.recommendation.confidence} confidence</p><p>{result.recommendation.basis}</p></div>
+          <div className="document-section"><h3>The risk we are accepting</h3><p>{result.challenge.title}</p><p>{result.challenge.invalidatedBy}</p></div>
+          <div className="document-section"><h3>The next useful test · proposed</h3><p>{result.test.method}</p><p><strong>Continue if:</strong> {result.test.success}</p><p><strong>Stop or reshape if:</strong> {result.test.stop}</p><p>{result.test.timebox} · {result.test.cost}</p></div>
+          <details className="full-pack"><summary>Full pack with evidence, assumptions, pre-mortem & source material</summary><pre>{pack}</pre></details>
+          <div className="document-footer"><ShieldCheck size={17} /><span>PM-owned decision. Source-linked analysis. No automatic sharing.</span></div>
+        </article>
+      </section>}
     </main>
     <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span><div><span>Claude for thinking · Sarvam for voice</span><span>{providers ? `${providers.ai ? 'Claude configured' : 'Claude not configured'} / ${providers.speech ? 'Voice configured' : 'Voice not configured'}` : 'Provider configuration status unavailable'}</span></div><p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
   </div></VoiceProvider>;

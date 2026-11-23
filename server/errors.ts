@@ -10,5 +10,6 @@ export function providerError(error: unknown, provider: string): AppError {
   const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : null;
   if (status === 401 || status === 403) return new AppError(503, 'provider_auth', `${provider} authentication failed. The host must check its server-side key and account access.`);
   if (status === 429) return new AppError(429, 'provider_quota', `${provider} is rate-limited or out of quota. Wait and retry, or use the illustrative example.`);
+  if (status === 400 || status === 422) return new AppError(502, 'provider_request', `${provider} rejected the request format or configuration. The host should check the configured model and voice against the documented API. Your text is unchanged.`);
   return new AppError(502, 'provider_failure', `${provider} could not complete this request. Your text is unchanged. Please retry.`);
 }

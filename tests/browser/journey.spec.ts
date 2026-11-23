@@ -18,10 +18,14 @@ test('illustrative review keeps the human decision separate and exports the full
   await exampleReview(page);
   await expect(page.locator('input[name=decision]:checked')).toHaveCount(0);
   await page.locator('input[value=stop]').check();
+  await expect(page.getByRole('button', { name: /Your decision/ })).toBeDisabled();
   await page.locator('#rationale').fill('We cannot staff this pilot. Reconsider next quarter.');
   await page.getByRole('button', { name: 'Create my decision pack' }).click();
   await expect(page.locator('.human-decision')).toContainText('Stop');
   await expect(page.locator('.decision-document')).toContainText('Test first');
+  await expect(page.getByRole('region', { name: 'Leadership story' })).toContainText(sampleReview.evidence[0].quote);
+  await expect(page.getByRole('region', { name: 'Leadership story' })).toContainText(sampleReview.evidence[0].limitation);
+  await expect(page.getByRole('region', { name: 'Leadership story' })).toContainText('not a result');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Markdown' }).click();
   expect((await download).suggestedFilename()).toBe('product-bet-decision.md');
@@ -133,8 +137,11 @@ test('opt-in draft survives offline reload; shell caching never stores API respo
   expect(cached.some(url => /\/assets\/.*\.js$/.test(url))).toBe(true);
 });
 
-test('normal text and action labels meet 4.5:1 contrast in each theme', async ({ page }) => {
-  await page.goto('/');
+test('light styling ignores the OS and obsolete theme hints while retaining contrast', async ({ page }) => {
+  await page.goto('/?clawpilotTheme=dark');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+  expect(await page.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false);
+  expect(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(252, 251, 248)');
   const ratios = await page.evaluate(() => {
     function luminance(color: string) {
       const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(v => v / 255)
@@ -156,4 +163,106 @@ test('normal text and action labels meet 4.5:1 contrast in each theme', async ({
     });
   });
   for (const result of ratios) expect(result.ratio, result.selector).toBeGreaterThanOrEqual(4.5);
+});
+
+test('exploring the example cannot overwrite an opted-in personal draft', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  const personal = 'A synthetic private draft that must not become the example.';
+  await page.locator('#idea').fill(personal);
+  await page.getByRole('checkbox', { name: 'Keep this unsent draft on this device' }).check();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('product-bet-studio:opt-in-draft:v1')!).idea)).toBe(personal);
+  await page.getByRole('button', { name: 'Product Bet Review Studio home' }).click();
+  await page.getByRole('button', { name: 'Explore the illustrative review' }).click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('product-bet-studio:opt-in-draft:v1')!).idea)).toBe(personal);
+});
+
+test('playback errors stay visible and pronunciation controls do not promise translation', async ({ page }) => {
+  await providers(page);
+  await page.route('**/api/speech/speak', route => route.fulfill({ json: { audios: [] } }));
+  await exampleReview(page);
+  await page.getByRole('button', { name: 'Read aloud: the bet as understood' }).click();
+  await expect(page.getByRole('alert')).toContainText('speech response was invalid');
+  await expect(page.getByRole('alert')).toBeInViewport();
+  await page.getByRole('button', { name: 'Dismiss playback error' }).click();
+  await page.getByRole('button', { name: 'Voice & playback settings' }).click();
+  await page.getByLabel('Pronunciation (no translation)').selectOption('hi-IN');
+  await expect(page.getByRole('region', { name: 'Voice settings' })).toContainText('does not turn an English review into Hindi');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('translation retries preserve the recording but require explicit transcript consent', async ({ page }) => {
+  await providers(page);
+  let attempts = 0;
+  await page.route('**/api/speech/transcribe', route => {
+    expect(route.request().postData()).toContain('translate');
+    attempts++;
+    return route.fulfill(attempts === 1
+      ? { status: 504, json: { error: 'Sarvam took too long. Retry this recording.' } }
+      : { json: { transcript: 'We want to run a small reorder test.', language: 'en-IN' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  await page.getByRole('combobox', { name: 'Transcription mode for idea', exact: true }).selectOption('translate');
+  await page.getByRole('button', { name: 'Speak: idea', exact: true }).click();
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: /Stop & transcribe/ }).click();
+  await expect(page.getByRole('alert')).toContainText('too long');
+  await expect(page.locator('#idea')).toHaveValue('');
+  await page.getByRole('button', { name: 'Retry this recording' }).click();
+  await expect(page.locator('.transcript-review')).toContainText('Review your English translation');
+  await expect(page.locator('#idea')).toHaveValue('');
+  await page.getByRole('button', { name: 'Add transcript to idea' }).click();
+  await expect(page.locator('#idea')).toHaveValue('We want to run a small reorder test.');
+  expect(attempts).toBe(2);
+});
+
+test('recording automatically stops at the short-turn cap with an explicit notice', async ({ page }) => {
+  await providers(page);
+  await page.route('**/api/speech/transcribe', route => route.fulfill({ json: { transcript: 'A capped synthetic voice turn.', language: 'en-IN' } }));
+  await page.clock.install();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  await page.getByRole('button', { name: 'Speak: idea', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Stop & transcribe/ })).toBeVisible();
+  await page.waitForTimeout(1200);
+  await page.clock.fastForward(28_000);
+  await expect(page.locator('.recording-limit')).toContainText('first 28 seconds');
+  await expect(page.locator('.transcript-review textarea')).toHaveValue('A capped synthetic voice turn.');
+  await expect(page.locator('#idea')).toHaveValue('');
+});
+
+test('waiting updates never reload or discard active text', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  await page.locator('#idea').fill('Finish this synthetic review before updating.');
+  await page.evaluate(() => window.dispatchEvent(new Event('studio-update-ready')));
+  await expect(page.getByRole('status')).toContainText('close all Studio tabs');
+  await expect(page.locator('#idea')).toHaveValue('Finish this synthetic review before updating.');
+});
+
+test('maximum-length Hindi material and unbroken review text fit narrow screens', async ({ page }) => {
+  await providers(page);
+  const review = {
+    ...sampleReview, title: 'क'.repeat(120), bet: 'अ'.repeat(1200),
+    evidence: [{ claim: 'इ'.repeat(500), sourceId: 'S2', quote: 'स'.repeat(500), limitation: 'ल'.repeat(500) }],
+    recommendation: { ...sampleReview.recommendation, basis: 'ह'.repeat(1200) },
+  };
+  await page.route('**/api/clarify', route => route.fulfill({ json: sampleClarification }));
+  await page.route('**/api/review', route => route.fulfill({ json: review }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  await page.locator('#idea').fill('अ'.repeat(4000));
+  await page.locator('#context').fill('स'.repeat(14000));
+  await page.getByRole('button', { name: 'Find the useful questions' }).click();
+  await page.locator('#Q1').fill('ज'.repeat(2000));
+  await page.getByRole('button', { name: 'Put the bet under pressure' }).click();
+  await expect(page.getByRole('heading', { name: review.title, exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('input[value=stop]').check();
+  await page.locator('#rationale').fill('PM '.repeat(1000));
+  await page.getByRole('button', { name: 'Create my decision pack' }).click();
+  await expect(page.locator('.human-decision')).toContainText('PM');
+  await page.getByText('Full pack with evidence, assumptions, pre-mortem & source material', { exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
