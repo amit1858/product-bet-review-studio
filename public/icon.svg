@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <style>:root { --cp-bg: #f7f4ef; --cp-accent: #b11f4b; }</style>
+  <rect width="512" height="512" rx="96" fill="var(--cp-bg)"/>
+  <g fill="none" stroke="var(--cp-accent)" stroke-width="18" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M136 210 256 148 376 210 256 272Z"/>
+    <path d="m136 256 120 62 120-62"/>
+    <path d="m136 302 120 62 120-62"/>
+  </g>
+</svg>
