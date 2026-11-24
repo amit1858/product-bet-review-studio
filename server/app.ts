@@ -9,6 +9,7 @@ import { type Config, voicesFor } from './config';
 import { AppError } from './errors';
 import { createSarvam, MAX_AUDIO_BYTES, sttOptionsSchema, translationInputSchema, ttsInputSchema } from './speech';
 import { containsCredential, credentialHeaders, providerForPath, providerKeySchema, type Provider } from '../shared/credentials';
+import { railwayClient, secureRequest, stagingGate } from './staging';
 
 export type Providers = {
   claude: ReturnType<typeof createClaude>;
@@ -23,6 +24,7 @@ export function createApp(config: Config, providers: Providers = { claude: creat
   const app = express();
   app.disable('x-powered-by');
   if (config.trustedProxies.length) app.set('trust proxy', config.trustedProxies);
+  app.use(stagingGate(config));
   app.use((req: CredentialRequest, res, next) => {
     const supplied = (['claude', 'sarvam'] as const).flatMap(provider => {
       const header = credentialHeaders[provider].toLowerCase();
@@ -39,7 +41,7 @@ export function createApp(config: Config, providers: Providers = { claude: creat
     if (supplied.length !== 1 || selected.count !== 1 || selected.provider !== providerForPath(req.path)) {
       return next(new AppError(400, 'invalid_credentials', 'Send only the key for the provider used by this request.'));
     }
-    if (!req.secure || !config.origin.startsWith('https://')) {
+    if (!secureRequest(req, config) || !config.origin.startsWith('https://')) {
       return next(new AppError(403, 'credentials_require_https', 'Personal provider keys require the configured HTTPS Studio URL.'));
     }
     const parsed = providerKeySchema.safeParse(selected.value);
@@ -76,6 +78,7 @@ export function createApp(config: Config, providers: Providers = { claude: creat
     next();
   });
   app.use('/api', rateLimit({
+    ...(config.railway ? { keyGenerator: railwayClient, validate: { xForwardedForHeader: false } } : {}),
     windowMs: 10 * 60 * 1000, limit: config.ipLimit, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: 'This connection has reached its request limit. Wait up to 10 minutes; your text is unchanged.' },
   }));

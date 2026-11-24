@@ -21,6 +21,8 @@ const schema = z.object({
   ipLimit: z.coerce.number().int().min(1).max(1000),
   concurrency: z.coerce.number().int().min(1).max(20),
   trustedProxies: z.array(trustedProxy),
+  stagingPassword: z.string(),
+  railway: z.boolean(),
 });
 export type Config = z.infer<typeof schema>;
 
@@ -39,6 +41,8 @@ export function readConfig(env = process.env): Config {
     ipLimit: env.MAX_REQUESTS_PER_IP_10_MIN || 60,
     concurrency: env.MAX_CONCURRENT_REQUESTS || 4,
     trustedProxies: (env.TRUSTED_PROXY_CIDRS || '').split(',').map(value => value.trim()).filter(Boolean),
+    stagingPassword: env.STAGING_PASSWORD || '',
+    railway: !!env.RAILWAY_PROJECT_ID,
   });
   if (!result.success) {
     // Never serialize config validation errors: they can contain credential input.
@@ -46,6 +50,14 @@ export function readConfig(env = process.env): Config {
   }
   if (new URL(result.data.origin).origin !== result.data.origin) {
     throw new Error('APP_ORIGIN must be an origin without a path or trailing slash.');
+  }
+  const { stagingPassword, railway, origin } = result.data;
+  if ((railway || env.STAGING_AUTH_REQUIRED === 'true' || stagingPassword) &&
+      (!/^[\x21-\x7e]{32,256}$/.test(stagingPassword) || !origin.startsWith('https://'))) {
+    throw new Error('Staging requires HTTPS APP_ORIGIN and a 32-256 character STAGING_PASSWORD. No configuration values were logged.');
+  }
+  if (railway && (result.data.anthropicKey || result.data.sarvamKey || result.data.trustedProxies.length)) {
+    throw new Error('Railway staging must use tab BYOK without hosted provider keys or generic proxy trust.');
   }
   return result.data;
 }

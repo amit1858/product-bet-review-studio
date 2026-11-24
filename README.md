@@ -118,6 +118,22 @@ Proxy trust is off unless `TRUSTED_PROXY_CIDRS` explicitly lists audited proxy a
 
 ## Production / self-host
 
+### Protected Railway staging
+
+The existing Dockerfile runs one persistent Node service, binds `0.0.0.0`, and reads Railway's runtime `PORT`. Deploy the verified local checkout into a separate **staging** environment, never an existing project's service. No database, volume, cache service, Git push, or custom domain is needed.
+
+Railway's `RAILWAY_PROJECT_ID` makes authentication mandatory: startup fails without a 32-256 visible-ASCII-character staging passphrase and an HTTPS `APP_ORIGIN` containing no path/trailing slash. Enter the passphrase as `STAGING_PASSWORD` **only through Railway's secure Variables UI or an approved no-echo terminal**, never a CLI argument, repository file or example environment file. Set `STAGING_AUTH_REQUIRED=true` explicitly as well. Do not configure `ANTHROPIC_API_KEY` or `SARVAM_API_KEY`; Railway staging refuses hosted provider keys and generic proxy trust.
+
+Every application, static, PWA and API route is behind the server gate. The sign-in form checks the exact origin and HTTPS, uses a constant-time passphrase-digest comparison, and limits attempts to ten per minute across the process. Its signed, expiring eight-hour `__Host-` cookie is `Secure`, `HttpOnly`, `SameSite=Strict`, and contains no passphrase or provider key. Changing the passphrase invalidates existing sessions. `POST /_staging/logout` from the same origin clears the browser cookie; copied cookies remain valid until expiry or passphrase rotation. No session database is used. On session expiry, API errors preserve text and direct the user to sign in in another tab. The browser sends the access cookie only to the same origin; provider keys remain tab-memory-only.
+
+Protected staging responses are `no-store`. Its authenticated `/sw.js` uses a network-only worker and removes prior Studio shell caches: **offline shell reuse is intentionally unavailable for protected staging**, so an expired session cannot reveal a cached application. Install metadata, icons and online refresh still work behind authentication. Normal self-hosted PWA caching is unchanged.
+
+[Railway's documented HTTPS-only edge](https://docs.railway.com/networking/public-networking/specs-and-limits) supplies `X-Forwarded-Proto: https` and `X-Real-IP`. Only Railway mode accepts that protocol with an exact configured Host match; it uses a validated `X-Real-IP` for client budgets and ignores `X-Forwarded-For`. Express `trust proxy` remains off. The container has no public TCP proxy, and the isolated project's private network must not gain unrelated services that could forge edge headers. Health/status endpoints are also gated; do not configure an unauthenticated application health-check bypass.
+
+Keep **one replica**. All login/provider/concurrency budgets live in that process, reset on restart, and do not coordinate across deployments or replicas. The existing 75-second analysis / 45-second speech deadlines and 28-second, mono 16kHz WAV recording cap fit Railway's documented networking timeouts; no Netlify Functions adapter or reduced voice limit is needed. Provider-side spending limits remain important: request counts are not dollar caps.
+
+Inspect workspace Compute and Agent usage **before and after** deployment without modifying their limits. The Compute hard limit can stop every workload, including unrelated projects; the Railway Agent budget is separate from BYOK provider billing. Idle persistent-service memory, CPU and egress consume Hobby usage even without provider calls. No auto-scaling, extra resources, add-ons or billing changes are required.
+
 ```powershell
 npm run build
 npm run start
@@ -138,7 +154,7 @@ Put an HTTPS reverse proxy in front of the Node service and serve the app at the
 
 ### Before any future hosted showcase
 
-**No hosting or public exposure was performed in this refinement pass.** The app itself has no login or access gate. A safe future hosting arrangement must fail closed:
+The optional staging gate described below protects every application, asset, PWA and API route. Other hosted arrangements still require a fail-closed access policy:
 
 - Require an authenticated email allowlist / invitation policy at the HTTPS gateway for **every route, including `/api/*`**, not just the landing page. Deny anonymous users before requests reach Node; verify unauthenticated direct API requests are denied.
 - Keep the Node port private to the gateway (loopback or a private container network). Do not expose a second ungated origin or publish a container port to all interfaces. Only the gateway should be able to reach it.

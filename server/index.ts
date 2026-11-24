@@ -8,8 +8,9 @@ const config = readConfig();
 const production = process.argv.includes('--production');
 const app = createApp(config, undefined, production);
 if (production) {
-  app.use('/assets', express.static(path.resolve('dist/assets'), { immutable: true, maxAge: '1y' }));
-  app.use(express.static(path.resolve('dist'), { maxAge: 0 }));
+  const protectedHeaders = config.stagingPassword ? { setHeaders: (res: express.Response) => { res.setHeader('Cache-Control', 'no-store'); } } : {};
+  app.use('/assets', express.static(path.resolve('dist/assets'), { immutable: !config.stagingPassword, maxAge: config.stagingPassword ? 0 : '1y', ...protectedHeaders }));
+  app.use(express.static(path.resolve('dist'), { maxAge: 0, ...protectedHeaders }));
   app.get('/{*path}', (_req, res) => res.sendFile(path.resolve('dist/index.html')));
 } else {
   const { createServer } = await import('vite');

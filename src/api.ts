@@ -25,7 +25,7 @@ export async function request(path: string, init?: RequestInit, credential?: { p
   const timeout = AbortSignal.timeout(95000);
   let response: Response;
   try {
-    response = await fetch(path, { ...init, headers, cache: 'no-store', credentials: 'omit', redirect: 'error',
+    response = await fetch(path, { ...init, headers, cache: 'no-store', credentials: 'same-origin', redirect: 'error',
       signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout });
   } catch (e) {
     if (init?.signal?.aborted) throw e;
@@ -37,6 +37,9 @@ export async function request(path: string, init?: RequestInit, credential?: { p
   try { body = await response.json(); }
   catch { throw new Error('The server returned an unreadable response. Your input is unchanged; try again.'); }
   if (!response.ok) {
+    if (z.object({ code: z.literal('staging_auth_required') }).safeParse(body).success) {
+      throw new Error('Staging sign-in expired. Open this Studio in a new tab to sign in, then retry here. Keep this tab open to preserve your draft and transcript.');
+    }
     if (credential) {
       const code = z.object({ code: z.string() }).safeParse(body);
       const provider = credential.provider === 'claude' ? 'Claude' : 'Sarvam';
