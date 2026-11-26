@@ -38,7 +38,12 @@ function StudioIllustration() {
 }
 
 function ErrorNotice({ message, dismiss }: { message: string; dismiss: () => void }) {
-  return <div className="notice error" role="alert"><CircleHelp size={19} /><span>{message}</span><button className="icon-button" onClick={dismiss} aria-label="Dismiss error"><X size={18} /></button></div>;
+  const notice = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    notice.current?.focus({ preventScroll: true });
+    notice.current?.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+  }, [message]);
+  return <div ref={notice} className="notice error" role="alert" aria-atomic="true" aria-labelledby="request-error-message" tabIndex={-1}><CircleHelp size={19} /><span id="request-error-message">{message}</span><button className="icon-button" onClick={dismiss} aria-label="Dismiss error"><X size={18} /></button></div>;
 }
 
 export function App() {

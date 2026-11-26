@@ -33,6 +33,36 @@ test('illustrative review keeps the human decision separate and exports the full
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test('failed clarification brings a focused error into view without losing the draft', async ({ page }) => {
+  await providers(page);
+  await page.route('**/api/clarify', route => route.abort('internetdisconnected'));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste my idea' }).click();
+  const idea = 'A synthetic grocery reminder pilot for ten fictional shoppers.';
+  const context = 'One week of learning, no measured retention uplift and no engineering changes.';
+  await page.locator('#idea').fill(idea);
+  await page.locator('#context').fill(context);
+  const submit = page.getByRole('button', { name: 'Find the useful questions' });
+  await submit.scrollIntoViewIfNeeded();
+  expect(await page.locator('.journey').evaluate(element => element.getBoundingClientRect().bottom < 0)).toBe(true);
+  await submit.click();
+  const alert = page.getByRole('alert', { name: /Could not reach the Studio server/ });
+  await expect(alert).toBeInViewport({ ratio: 1 });
+  await expect(alert).toBeFocused();
+  await expect(alert).toHaveAttribute('aria-atomic', 'true');
+  await expect(page.locator('#idea')).toHaveValue(idea);
+  await expect(page.locator('#context')).toHaveValue(context);
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Dismiss error' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(alert).toHaveCount(0);
+  await submit.click();
+  await expect(alert).toBeInViewport({ ratio: 1 });
+  await expect(alert).toBeFocused();
+  await expect(page.locator('#idea')).toHaveValue(idea);
+  await expect(page.locator('#context')).toHaveValue(context);
+});
+
 test('live clarification/review retries without losing input and invalidates a stale decision', async ({ page }) => {
   await providers(page);
   await page.route('**/api/clarify', route => route.fulfill({ json: sampleClarification }));
@@ -50,6 +80,9 @@ test('live clarification/review retries without losing input and invalidates a s
   await page.locator('#Q1').fill('We do not yet know the reason for churn.');
   await page.getByRole('button', { name: 'Put the bet under pressure' }).click();
   await expect(page.getByRole('alert')).toContainText('too long');
+  await expect(page.getByRole('alert')).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.locator('#understanding')).toHaveValue(sampleClarification.bet);
   await expect(page.locator('#Q1')).toHaveValue('We do not yet know the reason for churn.');
   await page.getByRole('button', { name: 'Put the bet under pressure' }).click();
   await page.locator('input[value=test]').check();
