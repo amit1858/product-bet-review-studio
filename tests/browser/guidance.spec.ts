@@ -209,6 +209,7 @@ test('builder route and tour respect pending and transcript locks', async ({ pag
   await page.getByRole('button', { name: /Stop & transcribe/ }).click();
   await expect(page.locator('.transcript-review textarea')).toHaveValue('A fictional workshop idea to test.');
   await expect(page.getByRole('button', { name: 'Take a guided tour' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Presenter Demo', exact: true })).toBeDisabled();
   await page.goBack();
   await expect(page.locator('.builder-workspace')).toHaveCount(0);
   await expect(page.locator('.transcript-review textarea')).toHaveValue('A fictional workshop idea to test.');
@@ -216,6 +217,7 @@ test('builder route and tour respect pending and transcript locks', async ({ pag
   await page.getByRole('button', { name: 'Find the useful questions' }).click();
   await expect(page.locator('.notice.loading')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Take a guided tour' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Presenter Demo', exact: true })).toBeDisabled();
   const builderLink = page.getByRole('link', { name: 'Build an app like this', exact: true });
   await expect(builderLink).toHaveAttribute('aria-disabled', 'true');
   await builderLink.focus();

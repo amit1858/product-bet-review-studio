@@ -53,8 +53,8 @@ function playAudio(url: string, signal: AbortSignal, onAudio: (audio: HTMLAudioE
   });
 }
 
-export function VoiceProvider({ children, providers, online, onCaptureChange, sessionKey }: {
-  children: ReactNode; providers: ProviderStatus | null; online: boolean; onCaptureChange: (busy: boolean) => void; sessionKey: string;
+export function VoiceProvider({ children, providers, online, suspended = false, onCaptureChange, sessionKey }: {
+  children: ReactNode; providers: ProviderStatus | null; online: boolean; suspended?: boolean; onCaptureChange: (busy: boolean) => void; sessionKey: string;
 }) {
   const access = useCredentialAccess();
   const request = access.request;
@@ -69,7 +69,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
   const controller = useRef<AbortController | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
   const cache = useRef<{ key: string; urls: string[] } | null>(null);
-  const enabled = online && (access.configured.sarvam ? access.secure : !!providers?.speech);
+  const enabled = !suspended && online && (access.configured.sarvam ? access.secure : !!providers?.speech);
   const stop = useCallback(() => {
     controller.current?.abort(); controller.current = null;
     audio.current?.pause(); audio.current = null; setPlayback(null);
@@ -148,7 +148,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
 
   return <VoiceContext.Provider value={{ enabled, capturing, setCapturing, releaseCapture, settings, playback, play, stop, request, credentialEpoch: access.epoch }}>
     {children}
-    <div className="voice-settings">
+    <div className="voice-settings" hidden={suspended}>
       <button className="text-button" onClick={() => setSettingsOpen(v => !v)} aria-expanded={settingsOpen}><Settings2 size={16} /> Voice & playback settings</button>
       {settingsOpen && <section aria-label="Voice settings" className="voice-settings-panel">
         <div><label htmlFor="spoken-language">Read-aloud language</label><select id="spoken-language" value={settings.language} onChange={e => changeSettings({ ...settings, language: e.target.value === 'hi-IN' ? 'hi-IN' : 'en-IN' })}><option value="en-IN">As written · English / mixed</option><option value="hi-IN">Hindi · translate before speech</option></select></div>
@@ -160,7 +160,7 @@ export function VoiceProvider({ children, providers, online, onCaptureChange, se
       {!playback && replay && !error && <button className="text-button" disabled={!enabled || !!capturing} onClick={() => void play(replay.text, replay.id, replay.label)}><RotateCcw size={14} />{cache.current ? 'Replay last audio' : 'Retry read aloud'}</button>}
       {error && <div className="notice error playback-bar" role="alert"><Volume2 size={18} /><span>{error}{replay && <button className="text-button" disabled={!enabled || !!capturing} onClick={() => void play(replay.text, replay.id, replay.label)}>{cache.current ? 'Replay prepared audio' : 'Retry read aloud'}</button>}</span><button className="icon-button" aria-label="Dismiss playback error" onClick={() => setError('')}><X size={16} /></button></div>}
     </div>
-    {playback && <div className="playback-bar" role="status"><Volume2 size={20} /><span><strong>{playback.state === 'translating' ? 'Translating to Hindi' : playback.state === 'preparing' ? 'Preparing speech' : 'Reading aloud'}</strong>{playback.label}{settings.language === 'hi-IN' && <small>Machine-translated audio; original record unchanged.</small>}</span><button className="button secondary" onClick={stop}><Square size={14} /> Stop playback</button></div>}
+    {!suspended && playback && <div className="playback-bar" role="status"><Volume2 size={20} /><span><strong>{playback.state === 'translating' ? 'Translating to Hindi' : playback.state === 'preparing' ? 'Preparing speech' : 'Reading aloud'}</strong>{playback.label}{settings.language === 'hi-IN' && <small>Machine-translated audio; original record unchanged.</small>}</span><button className="button secondary" onClick={stop}><Square size={14} /> Stop playback</button></div>}
   </VoiceContext.Provider>;
 }
 

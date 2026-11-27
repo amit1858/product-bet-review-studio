@@ -61,7 +61,7 @@ export function Walkthrough({ index, stage, locked, onIndex, onClose }: {
     <div className="tour-copy" role="status" aria-live="polite" aria-atomic="true">
       <h2 id="tour-heading">{stop.title}</h2><p>{stop.text}</p><p className="tour-handoff"><ArrowRight size={16} aria-hidden="true" />{stop.handoff}</p>
     </div>
-    <p className="tour-boundary">{stage === 'welcome' ? 'A preview of the four stages. The tour does not start or replace an idea.' : 'The outline marks this stop’s control or journey marker. Show highlighted area moves focus there without activating it. Return to tour is beside the journey map. Unavailable stages stay unavailable.'}</p>
+    <p className="tour-boundary">{stage === 'welcome' ? 'Learn the controls for your own work. The tour does not start or replace an idea. Use Presenter Demo for a separate, preloaded fictional journey.' : 'The outline marks this stop’s control or journey marker. Show highlighted area moves focus there without activating it. Return to tour is beside the journey map. Unavailable stages stay unavailable.'}</p>
     <div className="tour-controls">
       <button ref={back} className="button secondary" disabled={index === 0} onClick={() => onIndex(index - 1)}><ChevronLeft size={16} /> Back</button>
       <button ref={next} id="tour-next" className="button primary" onClick={() => index === stops.length - 1 ? onClose() : onIndex(index + 1)}>{index === stops.length - 1 ? 'Finish' : 'Next'}<ArrowRight size={16} /></button>

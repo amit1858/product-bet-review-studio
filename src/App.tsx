@@ -17,6 +17,7 @@ import { Guide } from './Guide';
 import { ThemeSelector } from './Theme';
 import { BuilderGuide } from './BuilderGuide';
 import { Walkthrough } from './Walkthrough';
+import { PresenterDemo } from './PresenterDemo';
 
 type Stage = 'welcome' | 'material' | 'clarify' | 'review' | 'pack';
 const labels: Record<Decision, string> = { proceed: 'Proceed', test: 'Test first', reshape: 'Reshape', stop: 'Stop' };
@@ -63,6 +64,10 @@ export function App() {
   const learningOpen = guideOpen || builderOpen;
   const [tourIndex, setTourIndex] = useState<number | null>(null);
   const tourEntry = useRef<HTMLButtonElement | null>(null);
+  const [presenting, setPresenting] = useState(false);
+  const presenterEntry = useRef<HTMLButtonElement | null>(null);
+  const presentingRef = useRef(false);
+  presentingRef.current = presenting;
   const [idea, setIdea] = useState('');
   const [context, setContext] = useState('');
   const [illustrative, setIllustrative] = useState(false);
@@ -89,6 +94,7 @@ export function App() {
   const aiReady = access.configured.claude ? access.secure : !!providers?.ai;
   useEffect(() => {
     const changed = () => {
+      if (presentingRef.current && window.location.hash === '#presenter-content') return;
       if ((busy || capturing) && learningRoute() !== 'studio') {
         window.history.replaceState(null, '', acceptedFragment.current || '#studio');
         setFeedback(capturing ? 'Add or discard your transcript before opening the guide.' : 'Wait for the current request to finish before opening the guide.');
@@ -97,6 +103,10 @@ export function App() {
       acceptedFragment.current = window.location.hash;
       setPage(learningRoute());
       setTourIndex(null);
+      setPresenting(false);
+      if (presentingRef.current && learningRoute() === 'studio') {
+        requestAnimationFrame(() => presenterEntry.current?.focus());
+      }
     };
     window.addEventListener('hashchange', changed);
     return () => window.removeEventListener('hashchange', changed);
@@ -114,7 +124,7 @@ export function App() {
   }
   useEffect(() => {
     void refreshStatus();
-    const on = () => { setOnline(true); void refreshStatus(); };
+    const on = () => { setOnline(true); if (!presentingRef.current) void refreshStatus(); };
     const off = () => setOnline(false);
     const unavailable = () => setError('Offline installation could not be enabled in this browser. The Studio works online; do not rely on offline access.');
     const updated = () => setUpdateReady(true);
@@ -154,6 +164,17 @@ export function App() {
     setTourIndex(null);
     if (tourEntry.current?.isConnected && !tourEntry.current.disabled) tourEntry.current.focus();
     else heading.current?.focus({ preventScroll: true });
+  }
+  function startPresenter(entry: HTMLButtonElement) {
+    if (locked) return;
+    presenterEntry.current = entry; setPresenting(true);
+  }
+  function closePresenter() {
+    setPresenting(false);
+    requestAnimationFrame(() => {
+      if (presenterEntry.current?.isConnected && !presenterEntry.current.disabled) presenterEntry.current.focus();
+      else heading.current?.focus();
+    });
   }
   function go(next: Stage) { if (!locked) setStage(next); }
   function resetAnalysis() {
@@ -255,17 +276,19 @@ export function App() {
     resetAnalysis(); draft.resumeSaving(); go('material');
   }
 
-  return <VoiceProvider providers={providers} online={online} onCaptureChange={setCapturing} sessionKey={learningOpen ? page : stage}><div className="app">
-    <a className="skip-link" href={guideOpen ? '#guide-content' : builderOpen ? '#builder-content' : '#main'}>Skip to content</a>
+  return <VoiceProvider providers={providers} online={online} suspended={presenting} onCaptureChange={setCapturing} sessionKey={presenting ? 'presenter' : learningOpen ? page : stage}><div className="app">
+    <a className="skip-link" href={presenting ? '#presenter-content' : guideOpen ? '#guide-content' : builderOpen ? '#builder-content' : '#main'}>Skip to content</a>
     <header className="site-header">
-      <button className="brand" onClick={() => { if (!locked) { go('welcome'); if (learningOpen) window.location.hash = 'studio'; } }} disabled={locked} aria-label="Product Bet Review Studio home">
+      <button className="brand" onClick={() => { if (presenting) { closePresenter(); return; } if (!locked) { go('welcome'); if (learningOpen) window.location.hash = 'studio'; } }} disabled={locked} aria-label="Product Bet Review Studio home">
         <span className="brand-mark"><Layers3 size={24} /></span><span>Product Bet<span className="brand-sub">REVIEW STUDIO</span></span>
       </button>
       <div className="header-right"><span className="edition">A WORKSPACE FOR BETTER JUDGMENT</span><span className="private-pill"><ShieldCheck size={14} /> Private by default</span><ThemeSelector /></div>
     </header>
-    {!learningOpen && <ProviderAccess providers={providers} />}
-    {!online && <div className="connectivity" role="status">You’re offline. The example and text editing work; AI and speech require internet. Unsent text is not saved automatically.</div>}
+    <div hidden={presenting}>{!learningOpen && <ProviderAccess providers={providers} />}</div>
+    {!online && !presenting && <div className="connectivity" role="status">You’re offline. The example and text editing work; AI and speech require internet. Unsent text is not saved automatically.</div>}
     <main id="main">
+      {presenting && <PresenterDemo onExit={closePresenter} />}
+      <div className="studio-workspace" hidden={presenting}>
       {guideOpen ? <Guide heading={heading} /> : builderOpen ? <BuilderGuide heading={heading} /> : <>
       {stage !== 'welcome' && <Journey stage={stage} clarified={!!clarification} reviewed={!!result} decided={!!decision && !!rationale.trim()} locked={locked} onGo={go} />}
       {stage !== 'welcome' && <div className="learning-actions"><button className="text-button" disabled={locked} onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><a className="text-button" href="#builder" aria-disabled={locked} onClick={event => { if (locked) event.preventDefault(); }}>Build an app like this <ArrowUpRight size={15} /></a>{tourIndex !== null && <button className="text-button" onClick={() => { document.getElementById('tour-next')?.focus(); }}>Return to tour</button>}</div>}
@@ -285,10 +308,15 @@ export function App() {
             <div className="hero-actions"><button className="button primary" onClick={() => begin(true)}>Try an example <ArrowRight size={18} /></button><button className="button secondary" onClick={() => begin(false)}><Clipboard size={17} /> Paste my idea</button></div>
             <button className="text-button speak-entry" onClick={() => { begin(false); setFeedback('Use Speak below the idea field. You choose when recording starts; English, Hindi, and mixed speech are supported.'); }}><Mic size={17} /> Prefer to talk it through? <span>Speak your idea</span><ArrowUpRight size={15} /></button>
             <a className="text-button guide-entry" href="#guide"><FileText size={17} /> Build your own Product Bet <ArrowUpRight size={15} /></a>
-            <div className="hero-learning"><button className="text-button" onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><a className="text-button" href="#builder">Build an app like this <ArrowUpRight size={15} /></a></div>
+            <div className="hero-learning"><button className="text-button" onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><button className="text-button" onClick={event => startPresenter(event.currentTarget)}>Presenter Demo</button><a className="text-button" href="#builder">Build an app like this <ArrowUpRight size={15} /></a></div>
+            <p className="learning-intents">Guided tour: learn controls with your own work. Presenter Demo: show a separate preloaded story. Try an example: explore independently.</p>
             <div className="hero-promise"><span>No accounts.</span><span>No automatic saving.</span><span>You make the call.</span></div>
           </div>
           <StudioIllustration />
+        </section>
+        <section className="try-yourself" aria-labelledby="try-yourself-heading">
+          <span className="eyebrow">TRY IT YOURSELF / NO PROVIDER KEYS NEEDED</span><h2 id="try-yourself-heading">One fictional bet. Your own pace.</h2>
+          <ol><li>Open this protected staging link and sign in directly if prompted. Never share the passphrase in chat or presentation files.</li><li>Choose <strong>Try an example</strong>. Leave the fictional material unchanged to stay on the pre-authored, no-provider path.</li><li>Continue with the example, review the questions, then choose <strong>Put the bet under pressure</strong>. Select a decision and add a fictional rationale to create a pack.</li><li>Use <strong>Take a guided tour</strong> for control explanations. Open <strong>Build an app like this</strong> for the separate methodology and static Markdown pack.</li><li>All sample claims and outputs are illustrative, not validated evidence. Editing the bet or interpretation requires Claude for analysis; speech requires Sarvam. Configure your own providers separately over HTTPS, only when you intend to use them.</li></ol>
         </section>
         <section className="journey-intro" aria-label="How the studio works">
           <div className="section-heading"><span className="eyebrow">FROM A HUNCH TO A HUMAN DECISION</span><span className="quiet">One considered review. Not another chat.</span></div>
@@ -399,8 +427,10 @@ export function App() {
           <div className="document-footer"><ShieldCheck size={17} /><span>PM-owned decision. Source-linked analysis. No automatic sharing.</span></div>
         </article>
       </section>}
+      {stage !== 'welcome' && <div className="learning-actions presenter-entry"><button className="text-button" disabled={locked} onClick={event => startPresenter(event.currentTarget)}>Presenter Demo</button><span>Show a separate fictional journey without replacing this work.</span></div>}
       </>}
+      </div>
     </main>
-    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span>{!learningOpen && <div><span>Claude for thinking · Sarvam for voice</span><span>{access.configured.claude ? 'Claude: your tab key' : providers?.ai ? 'Claude: host/demo key' : 'Claude not configured'} / {access.configured.sarvam ? 'Sarvam: your tab key' : providers?.speech ? 'Sarvam: host/demo key' : 'Voice not configured'}</span></div>}<p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
+    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span>{!learningOpen && !presenting && <div><span>Claude for thinking · Sarvam for voice</span><span>{access.configured.claude ? 'Claude: your tab key' : providers?.ai ? 'Claude: host/demo key' : 'Claude not configured'} / {access.configured.sarvam ? 'Sarvam: your tab key' : providers?.speech ? 'Sarvam: host/demo key' : 'Voice not configured'}</span></div>}<p>{presenting ? 'Presenter Demo uses static fiction only. No live AI, speech, exports or automatic sharing.' : 'Session-only by default. AI and speech need internet. Provider retention policies apply.'}</p></footer>
   </div></VoiceProvider>;
 }

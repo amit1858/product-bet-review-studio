@@ -100,6 +100,10 @@ The connected four-stage navigator distinguishes current, completed, and unavail
 
 On a journey screen, **Show highlighted area** explicitly focuses/scrolls to the relevant control or unavailable marker without activating it; **Return to tour** focuses the tour controls again. Neither action navigates a stage. Spotlight focus is disabled during pending work or unaccepted transcripts. The tour is an orientation, not an automatic demo: it never fills an example or advances the workflow for you.
 
+**Presenter Demo** is a distinct, read-only four-stop click-through launched from the landing page or journey actions. Back, Next, Replay and Exit control only its in-memory stop; talking points can be hidden. It reuses static fictional fixtures and reasoning visuals, labels every stop illustrative/unverified, and never invokes AI, speech, export, storage or backend requests. The regular app still makes its initial configuration-status request before demo entry. Reconnection does not refresh backend status while presenting. Real workspace controls and provider/voice controls are hidden while the demo runs; workspace components remain mounted to preserve draft consent, both material fields, answers, decisions, errors and tour progress. Entry is blocked during pending analysis or unaccepted transcripts. Exiting restores the entry focus; Escape exits from demo content. Changing a guide/history route also leaves the demo without changing work. Replay resets only the demo. This is not a second editable workspace or live provider response.
+
+**Try it yourself** on the landing page explains the protected staging sign-in, unchanged **Try an example** path, four stages, tour, separate builder pack and provider boundaries. The pre-authored example requires no keys; editing its bet or interpretation switches to live Claude analysis. Voice remains a separate explicit opt-in requiring Sarvam configuration. Presenter readiness and production readiness are separate gates.
+
 ### Voice behavior
 
 - Tap **Speak** to start; tap **Stop & transcribe** to finish. There is no always-listening or full-duplex mode.
