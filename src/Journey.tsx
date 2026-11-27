@@ -3,10 +3,10 @@ import type { Clarification, Decision, Review } from '../shared/schema';
 
 export type JourneyStage = 'material' | 'clarify' | 'review' | 'pack';
 const steps = [
-  { stage: 'material', label: 'The material', output: 'Signals & claims' },
-  { stage: 'clarify', label: 'The questions', output: 'Assumptions & unknowns' },
-  { stage: 'review', label: 'The review', output: 'Challenge & small test' },
-  { stage: 'pack', label: 'Your decision', output: 'Human choice' },
+  { stage: 'material', concept: 'Signal', label: 'The material', output: 'Signals & claims' },
+  { stage: 'clarify', concept: 'Question', label: 'The questions', output: 'Assumptions & unknowns' },
+  { stage: 'review', concept: 'Test', label: 'The review', output: 'Challenge & small test' },
+  { stage: 'pack', concept: 'Decision', label: 'Your decision', output: 'Human choice' },
 ] as const;
 
 export function Journey({ stage, clarified, reviewed, decided, locked, onGo }: {
@@ -21,7 +21,7 @@ export function Journey({ stage, clarified, reviewed, decided, locked, onGo }: {
       return <li key={step.stage} data-stage={step.stage} data-state={state}>
         <button disabled={!available[step.stage] || locked} onClick={() => onGo(step.stage)} aria-current={state === 'current' ? 'step' : undefined}>
           <span className="step-marker" aria-hidden="true">{complete[step.stage] ? <Check size={16} /> : `0${index + 1}`}</span>
-          <span className="step-label">{step.label}</span>
+          <span className="step-label"><strong>{step.concept}</strong><span>{step.label}</span></span>
           <span className="step-output">{step.output}</span>
           <span className="sr-only">{state === 'complete' ? 'Completed' : state === 'upcoming' ? 'Not available yet' : ''}</span>
         </button>

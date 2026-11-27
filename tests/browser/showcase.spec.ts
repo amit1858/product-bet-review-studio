@@ -45,6 +45,64 @@ async function contrast(page: Page, selectors: string[], minimum = 4.5, property
 }
 
 for (const theme of themes) {
+  test(`${theme}: compact visual system retains readable controls and expandable learning content`, async ({ page }) => {
+    const phone = page.viewportSize()!.width <= 700;
+    await page.setViewportSize(phone ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    await page.route('**/api/**', route => {
+      if (new URL(route.request().url()).pathname === '/api/status') return route.fulfill({ json: {
+        ai: false, speech: false, ttsModel: 'bulbul:v4-flash', voices: ['shubh_enhi_companion'], defaultVoice: 'shubh_enhi_companion',
+      } });
+      return route.abort('blockedbyclient');
+    });
+    await page.goto('/');
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+    const height = () => page.evaluate(() => document.documentElement.scrollHeight);
+    await expect.poll(height).toBeLessThanOrEqual(Math.floor((phone ? 3890 : 2451) * .8));
+    const hero = await page.locator('.hero h1').evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+    expect(hero).toBeGreaterThanOrEqual(phone ? 44 : 64);
+    expect(hero).toBeLessThanOrEqual(phone ? 56 : 76);
+    await expect(page.getByRole('button', { name: 'Try an example', exact: true })).toBeInViewport({ ratio: 1 });
+    if (!phone) {
+      const width = await page.locator('.hero').evaluate(element => {
+        const first = element.firstElementChild!.getBoundingClientRect();
+        const last = element.lastElementChild!.getBoundingClientRect();
+        return last.right - first.left;
+      });
+      expect(width).toBeGreaterThanOrEqual(1200);
+      expect(width).toBeLessThanOrEqual(1280);
+      await expect(page.locator('.studio-illustration')).toBeInViewport({ ratio: 1 });
+    }
+    for (const selector of ['.hero-actions .button', '.note-label', '.note-foot', '.hero-learning p', '.hero-promise', '.folio']) {
+      const sizes = await page.locator(selector).evaluateAll(elements => elements.map(element => parseFloat(getComputedStyle(element).fontSize)));
+      for (const size of sizes) expect(size, selector).toBeGreaterThanOrEqual(13);
+    }
+    await contrast(page, ['.note-label', '.note-foot', '.illustration-note p', '.hero-learning p']);
+    await noOverflow(page);
+    await page.getByRole('link', { name: 'Build your own Product Bet', exact: true }).click();
+    expect(await height()).toBeLessThanOrEqual(Math.floor((phone ? 5071 : 3877) * .8));
+    const detail = page.locator('#guide-material .guide-detail');
+    await detail.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(detail).toHaveAttribute('open', '');
+    await expect(detail.getByRole('heading', { name: 'Ask yourself' })).toBeVisible();
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async () => { throw new Error('Synthetic clipboard denial'); },
+    } }));
+    await page.getByRole('button', { name: 'Copy starter template' }).click();
+    await expect(page.getByRole('alert')).toContainText('Select and copy');
+    const template = page.getByRole('region', { name: 'A starting point, not a script.' }).locator('details');
+    await expect(template).toHaveAttribute('open', '');
+    await expect(template.locator('pre')).toHaveText(starterTemplate);
+    await page.goto('/#builder');
+    expect(await height()).toBeLessThanOrEqual(Math.floor((phone ? 4678 : 3973) * .8));
+    const method = page.locator('.methodology-flow details').first();
+    await method.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(method).toHaveAttribute('open', '');
+    await expect(method.locator('p')).toBeVisible();
+    await noOverflow(page);
+  });
+
   test(`${theme}: full journey, guide, contrast and responsive surfaces`, async ({ page }, testInfo) => {
     let providerRequests = 0;
     await page.route('**/api/**', route => {
@@ -75,6 +133,11 @@ for (const theme of themes) {
     await expect(page.locator('.journey [aria-current=step]')).toContainText('The material');
     await expect(page.getByRole('button', { name: /The questions/ })).toBeDisabled();
     await expect(page.locator('#idea')).toBeInViewport();
+    for (const selector of ['.field-label', '.draft-consent label', '.reasoning-trail summary']) {
+      for (const size of await page.locator(selector).evaluateAll(elements => elements.map(element => parseFloat(getComputedStyle(element).fontSize)))) {
+        expect(size, selector).toBeGreaterThanOrEqual(15);
+      }
+    }
     await expect(page.getByRole('region', { name: 'From material to useful questions' })).toContainText(sampleIdea);
     await contrast(page, ['.trail-heading h3', '.trail-preview', '.trail-note', '.reasoning-trail summary', '.journey .step-label', '.field-label', '.margin-note p']);
     await noOverflow(page);

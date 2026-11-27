@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { ArrowRight, Clipboard, FileText, CircleHelp, Layers3, FlaskConical } from 'lucide-react';
 
 const guideStages = [
@@ -63,10 +63,11 @@ Revisit when: [...]`;
 export function Guide({ heading }: { heading: RefObject<HTMLHeadingElement | null> }) {
   const [message, setMessage] = useState('');
   const [copyFailed, setCopyFailed] = useState(false);
+  const template = useRef<HTMLDetailsElement>(null);
   return <section id="guide-content" className="workspace guide-workspace">
     <a className="text-button" href="#studio">Return to the Studio <ArrowRight size={16} /></a>
     <div className="page-heading"><p className="eyebrow">A FIELD GUIDE / NO PERFECT PITCH REQUIRED</p>
-      <h1 ref={heading} tabIndex={-1}>Build your own<br /><em>Product Bet</em></h1>
+      <h1 ref={heading} tabIndex={-1}>Build your own <em>Product Bet</em></h1>
       <p>A useful bet is not a prediction. It is a clear hypothesis, its evidence boundaries, and a choice about what to learn next.</p>
     </div>
     <div className="guide-boundary"><strong>Use this guide without sharing an idea.</strong><p>This page is static. Its fictional example and template do not use your current material, provider keys or decision. On hosted staging, the existing access gate still applies.</p></div>
@@ -75,18 +76,21 @@ export function Guide({ heading }: { heading: RefObject<HTMLHeadingElement | nul
     {guideStages.map((stage, index) => <section key={stage.title} id={`guide-${stage.title.toLowerCase()}`} className="guide-stage" tabIndex={-1} aria-labelledby={`guide-heading-${stage.title.toLowerCase()}`}>
       <header><span className="guide-stage-icon"><stage.icon size={22} aria-hidden="true" /></span><div><span className="eyebrow">STAGE 0{index + 1}</span><h2 id={`guide-heading-${stage.title.toLowerCase()}`}>{stage.title}</h2></div></header>
       <p>{stage.bring}</p>
-      <div className="guide-stage-grid"><div><h3>Ask yourself</h3><ul>{stage.prompts.map(prompt => <li key={prompt}>{prompt}</li>)}</ul></div>
-        <div><h3>What you leave with</h3><p>{stage.output}</p><h3>How it carries forward</h3><p>{stage.next}</p></div></div>
-      <aside className="guide-example"><span className="eyebrow">FICTIONAL / GROCERY REMINDER</span><p>{stage.example}</p></aside>
+      <p className="guide-output"><strong>What you leave with</strong>{stage.output}</p>
+      <details className="guide-detail"><summary>Explore {stage.title.toLowerCase()}: prompts, example and next step</summary>
+        <div className="guide-stage-grid"><div><h3>Ask yourself</h3><ul>{stage.prompts.map(prompt => <li key={prompt}>{prompt}</li>)}</ul></div>
+          <div><h3>How it carries forward</h3><p>{stage.next}</p></div></div>
+        <aside className="guide-example"><span className="eyebrow">FICTIONAL / GROCERY REMINDER</span><p>{stage.example}</p></aside>
+      </details>
     </section>)}
     <section className="guide-template" aria-labelledby="template-heading"><p className="eyebrow">START ROUGH. KEEP THE UNKNOWNS.</p><h2 id="template-heading">A starting point, not a script.</h2>
       <p>Copy this blank template into your own notes. Keep confidential material out of a showcase. Copying does not submit anything.</p>
       <button className="button primary" onClick={async () => {
         try { await navigator.clipboard.writeText(starterTemplate); setCopyFailed(false); setMessage('Starter template copied. No current Studio material was included.'); }
-        catch { setCopyFailed(true); setMessage('Clipboard access is unavailable. Select and copy the template text below.'); }
+        catch { setCopyFailed(true); setMessage('Clipboard access is unavailable. Select and copy the template text below.'); if (template.current) template.current.open = true; }
       }}><Clipboard size={16} /> Copy starter template</button>
       {message && <p className={`notice${copyFailed ? ' error' : ''}`} role={copyFailed ? 'alert' : 'status'}>{message}</p>}
-      <pre tabIndex={0} aria-label="Product Bet starter template">{starterTemplate}</pre>
+      <details ref={template}><summary>Read or manually copy the starter template</summary><pre tabIndex={0} aria-label="Product Bet starter template">{starterTemplate}</pre></details>
     </section>
     <a className="text-button" href="#studio">Return to your Studio <ArrowRight size={16} /></a>
   </section>;

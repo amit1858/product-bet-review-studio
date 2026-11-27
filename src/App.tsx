@@ -31,18 +31,17 @@ const learningRoute = () => isGuideRoute() ? 'guide' : isBuilderRoute() ? 'build
 
 function StudioIllustration() {
   return <div className="studio-illustration" aria-label="Fictional example: a note about repeating last week's grocery order is a signal, not proof. Question whether convenience explains leaving, then propose a small test before deciding." role="img">
-    <div className="illustration-top"><span className="eyebrow">THE THINKING TABLE</span><span className="folio">01 / 03</span></div>
-    <div className="illustration-note evidence-note">
-      <span className="note-label"><span className="status-dot" /> A signal</span>
-      <p>“I just want last week’s order.”</p><span className="note-foot">FICTIONAL CUSTOMER NOTE · NOT PROOF</span>
+    <div className="illustration-top"><span className="eyebrow">THE THINKING CANVAS</span><span className="folio">FICTIONAL EXAMPLE</span></div>
+    <div className="canvas-flow">
+      <div className="illustration-note evidence-note"><span className="note-label"><FileText size={18} /> 01 / Signal</span><p>“I just want last week’s order.”</p><span className="note-foot">A supplied claim. Not proof.</span></div>
+      <ArrowRight className="canvas-link link-one" size={24} />
+      <div className="illustration-note challenge-note"><span className="note-label"><CircleHelp size={18} /> 02 / Question</span><p>Is convenience why they leave?</p><span className="note-foot">Keep the uncertainty visible.</span></div>
+      <ArrowRight className="canvas-link link-two" size={24} />
+      <div className="illustration-note test-note"><span className="note-label"><FlaskConical size={18} /> 03 / Test</span><p>Try a manual reorder.</p><span className="note-foot">Proposed only. Not run.</span></div>
+      <ArrowRight className="canvas-link link-three" size={24} />
+      <div className="illustration-note decision-note"><span className="note-label"><Check size={18} /> 04 / Decision</span><p>Learn first.<br />Then make the call.</p><span className="note-foot">A human choice. Not a verdict.</span></div>
     </div>
-    <div className="illustration-connector"><span /><ArrowRight size={22} /><span /></div>
-    <div className="illustration-note challenge-note">
-      <span className="note-label"><CircleHelp size={15} /> A better question</span>
-      <p>Is convenience really<br />the reason they leave?</p>
-    </div>
-    <div className="illustration-test"><FlaskConical size={23} /><div><strong>One small test.</strong><span>Before one big commitment.</span></div><ArrowUpRight size={22} /></div>
-    <div className="illustration-bottom"><span>Evidence → Challenge → Decision</span><span className="studio-stamp">BET<br />WISELY.</span></div>
+    <div className="illustration-bottom"><span>Signals become questions. Tests inform decisions.</span></div>
   </div>;
 }
 
@@ -308,23 +307,30 @@ export function App() {
             <div className="hero-actions"><button className="button primary" onClick={() => begin(true)}>Try an example <ArrowRight size={18} /></button><button className="button secondary" onClick={() => begin(false)}><Clipboard size={17} /> Paste my idea</button></div>
             <button className="text-button speak-entry" onClick={() => { begin(false); setFeedback('Use Speak below the idea field. You choose when recording starts; English, Hindi, and mixed speech are supported.'); }}><Mic size={17} /> Prefer to talk it through? <span>Speak your idea</span><ArrowUpRight size={15} /></button>
             <a className="text-button guide-entry" href="#guide"><FileText size={17} /> Build your own Product Bet <ArrowUpRight size={15} /></a>
-            <div className="hero-learning"><button className="text-button" onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><button className="text-button" onClick={event => startPresenter(event.currentTarget)}>Presenter Demo</button><a className="text-button" href="#builder">Build an app like this <ArrowUpRight size={15} /></a></div>
-            <p className="learning-intents">Guided tour: learn controls with your own work. Presenter Demo: show a separate preloaded story. Try an example: explore independently.</p>
             <div className="hero-promise"><span>No accounts.</span><span>No automatic saving.</span><span>You make the call.</span></div>
           </div>
           <StudioIllustration />
         </section>
+        <section className="hero-learning" aria-label="Choose your path">
+          <article><span className="path-icon"><CircleHelp size={22} aria-hidden="true" /></span><div><button className="text-button" onClick={event => startTour(event.currentTarget)}>Take a guided tour <ArrowRight size={16} aria-hidden="true" /></button><p>Learn the controls with your own work. Nothing is advanced for you.</p></div></article>
+          <article><span className="path-icon"><Layers3 size={22} aria-hidden="true" /></span><div><button className="text-button" onClick={event => startPresenter(event.currentTarget)}>Presenter Demo <ArrowRight size={16} aria-hidden="true" /></button><p>Show a separate, preloaded fictional journey. Your workspace stays intact.</p></div></article>
+          <article><span className="path-icon"><FlaskConical size={22} aria-hidden="true" /></span><div><a className="text-button" href="#builder">Build an app like this <ArrowUpRight size={16} aria-hidden="true" /></a><p>A disciplined method and reusable templates for builders.</p></div></article>
+        </section>
         <section className="try-yourself" aria-labelledby="try-yourself-heading">
           <span className="eyebrow">TRY IT YOURSELF / NO PROVIDER KEYS NEEDED</span><h2 id="try-yourself-heading">One fictional bet. Your own pace.</h2>
-          <ol><li>Open this protected staging link and sign in directly if prompted. Never share the passphrase in chat or presentation files.</li><li>Choose <strong>Try an example</strong>. Leave the fictional material unchanged to stay on the pre-authored, no-provider path.</li><li>Continue with the example, review the questions, then choose <strong>Put the bet under pressure</strong>. Select a decision and add a fictional rationale to create a pack.</li><li>Use <strong>Take a guided tour</strong> for control explanations. Open <strong>Build an app like this</strong> for the separate methodology and static Markdown pack.</li><li>All sample claims and outputs are illustrative, not validated evidence. Editing the bet or interpretation requires Claude for analysis; speech requires Sarvam. Configure your own providers separately over HTTPS, only when you intend to use them.</li></ol>
+          <p>Protected staging: sign in directly if prompted; never share the passphrase. The unchanged example needs no provider keys. All sample claims and outputs are illustrative, not validated evidence.</p>
+          <details><summary>How to try the example, step by step</summary><ol><li>Choose <strong>Try an example</strong>. Leave the fictional material unchanged to stay on the pre-authored, no-provider path.</li><li>Continue with the example, review the questions, then choose <strong>Put the bet under pressure</strong>. Select a decision and add a fictional rationale to create a pack.</li><li>Use <strong>Take a guided tour</strong> for control explanations. Open <strong>Build an app like this</strong> for the separate methodology and static Markdown pack.</li></ol></details>
+          <p className="try-boundary">Editing the bet or interpretation requires Claude for analysis; speech requires Sarvam. Configure your own providers separately over HTTPS, only when you intend to use them.</p>
         </section>
         <section className="journey-intro" aria-label="How the studio works">
-          <div className="section-heading"><span className="eyebrow">FROM A HUNCH TO A HUMAN DECISION</span><span className="quiet">One considered review. Not another chat.</span></div>
+          <details><summary>From a hunch to a human decision</summary>
+          <p className="quiet">One considered review. Not another chat.</p>
           <div className="principle-grid">
             <article><span className="principle-number">01</span><h3>Bring the messy middle.</h3><p>A product idea, a customer quote, a metric. Paste it or talk it through.</p></article>
             <article><span className="principle-number">02</span><h3>Put the bet under pressure.</h3><p>Separate evidence from assumptions. Find the question that could change everything.</p></article>
             <article><span className="principle-number">03</span><h3>Choose what happens next.</h3><p>Proceed, test, reshape, or stop. Leave with a concise decision pack—not a wall of text.</p></article>
           </div>
+          </details>
         </section>
         <section className="example-feature">
           <div className="example-visual"><span className="eyebrow">THE SECOND BASKET</span><div className="basket-art" aria-hidden="true"><span /><span /><span /><span /><div /></div><span className="visual-caption">Same groceries.<br /><em>A different product bet.</em></span></div>

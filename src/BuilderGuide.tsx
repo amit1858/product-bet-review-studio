@@ -29,7 +29,7 @@ export function BuilderGuide({ heading }: { heading: RefObject<HTMLHeadingElemen
   return <section id="builder-content" className="workspace guide-workspace builder-workspace">
     <a className="text-button" href="#studio">Return to the Studio <ArrowRight size={16} /></a>
     <div className="page-heading"><p className="eyebrow">FOR BUILDERS / A METHOD, NOT A CLONE</p>
-      <h1 ref={heading} tabIndex={-1}>Build an app<br /><em>like this</em></h1>
+      <h1 ref={heading} tabIndex={-1}>Build an app <em>like this</em></h1>
       <p>Start with a real problem. Build in small slices. Put the work—and the review—under pressure.</p>
     </div>
     <div className="guide-boundary"><strong>Two different jobs.</strong><p>This guide helps builders create a similar product using a disciplined methodology. To examine your own idea, use <a href="#guide">Build your own Product Bet</a>. This static pack contains no current user material, credentials, source code or private deployment settings. The existing hosted access gate still applies.</p></div>
@@ -46,7 +46,7 @@ export function BuilderGuide({ heading }: { heading: RefObject<HTMLHeadingElemen
     <section id="builder-methodology" className="guide-stage" tabIndex={-1} aria-labelledby="builder-methodology-heading">
       <h2 id="builder-methodology-heading">From problem to reviewed product.</h2>
       <ol className="methodology-flow">{methodology.map(([title, text], index) => <li key={title}>
-        <span className="step-marker" aria-hidden="true">{index + 1}</span><div><h3>{title}</h3><p>{text}</p></div>
+        <span className="step-marker" aria-hidden="true">{index + 1}</span><details><summary>{title}</summary><p>{text}</p></details>
       </li>)}</ol>
     </section>
     {buildSections.map(section => <section key={section.id} id={`builder-${section.id}`} className="guide-stage guide-template" tabIndex={-1} aria-labelledby={`builder-heading-${section.id}`}>
