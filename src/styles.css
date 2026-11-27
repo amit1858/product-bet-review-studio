@@ -226,9 +226,9 @@ main { min-height: 65vh; }
 .journey { border-bottom: 1px solid var(--studio-border); padding: 0 var(--page-gutter); }
 .journey ol { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: auto; padding: 0; list-style: none; }
 .journey li { position: relative; min-width: 0; }
-.journey li:not(:last-child)::after { content: ""; position: absolute; top: 28px; left: calc(50% + 24px); width: calc(100% - 48px); height: 2px; background: var(--studio-border-strong); }
-.journey button { display: grid; grid-template-columns: 32px auto; justify-content: center; align-items: center; gap: 4px 10px; width: 100%; padding: 12px 8px 8px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--studio-text-muted); font-size: var(--type-control); line-height: 1.3; }
-.step-label { text-align: left; }
+.journey li:not(:last-child)::after { content: ""; position: absolute; top: 27px; left: calc(50% + 24px); width: calc(100% - 48px); height: 2px; background: var(--studio-border-strong); }
+.journey button { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: center; align-content: start; gap: 8px; width: 100%; height: 100%; padding: 12px 8px 8px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--studio-text-muted); font-size: var(--type-control); line-height: 1.3; }
+.step-label { text-align: center; }
 .step-label strong { display: block; font-size: 17px; }
 .step-label > span { display: block; font-size: var(--type-caption); font-weight: 400; }
 .journey button:disabled { opacity: 1; }
@@ -617,7 +617,7 @@ details p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; fon
   .step-label strong { font-size: 15px; }
   .step-label > span { font-size: 13px; }
   .step-output { font-size: 13px; line-height: 1.3; }
-  .journey li:not(:last-child)::after { top: 24px; left: calc(50% + 18px); width: calc(100% - 36px); }
+  .journey li:not(:last-child)::after { top: 23px; left: calc(50% + 18px); width: calc(100% - 36px); }
   .reasoning-trail ol { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr; }
   .reasoning-trail li { padding: 16px 20px; }
   .reasoning-trail li + li { border-left: 0; }

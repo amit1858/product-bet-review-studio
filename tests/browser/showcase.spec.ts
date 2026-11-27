@@ -1,5 +1,5 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { sampleClarification, sampleContext, sampleIdea, sampleReview } from '../../src/sample';
 import { starterTemplate } from '../../src/Guide';
@@ -44,7 +44,86 @@ async function contrast(page: Page, selectors: string[], minimum = 4.5, property
   for (const value of ratios) expect(value.ratio, value.selector).toBeGreaterThanOrEqual(minimum);
 }
 
+async function trackerLane(page: Page, testInfo: TestInfo, theme: string, width: number, screen: string) {
+  const tracker = page.getByRole('navigation', { name: 'Review stages', exact: true });
+  const geometry = await tracker.evaluate(element => {
+    const rect = (box: DOMRect) => ({ left: box.left, right: box.right, top: box.top, bottom: box.bottom });
+    const steps = Array.from(element.querySelectorAll('li'));
+    return {
+      markers: steps.map(step => rect(step.querySelector('.step-marker')!.getBoundingClientRect())),
+      connectors: steps.slice(0, -1).map(step => {
+        const box = step.getBoundingClientRect();
+        const style = getComputedStyle(step, '::after');
+        const left = box.left + parseFloat(style.left), top = box.top + parseFloat(style.top);
+        return { left, top, right: left + parseFloat(style.width), bottom: top + parseFloat(style.height) };
+      }),
+      labels: Array.from(element.querySelectorAll('.step-label strong, .step-label > span, .step-output, .journey-status')).map(label => ({
+        text: label.textContent, ...rect(label.getBoundingClientRect()),
+      })),
+    };
+  });
+  expect(geometry.markers).toHaveLength(4);
+  expect(geometry.connectors).toHaveLength(3);
+  for (const [index, connector] of geometry.connectors.entries()) {
+    const marker = geometry.markers[index], next = geometry.markers[index + 1];
+    expect(connector.left).toBeGreaterThanOrEqual(marker.right);
+    expect(connector.right).toBeLessThanOrEqual(next.left);
+    expect(Math.abs((connector.top + connector.bottom - marker.top - marker.bottom) / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs((connector.top + connector.bottom - next.top - next.bottom) / 2)).toBeLessThanOrEqual(1);
+    for (const label of geometry.labels) {
+      const overlap = connector.left < label.right && connector.right > label.left && connector.top < label.bottom && connector.bottom > label.top;
+      expect(overlap, `${screen}: connector ${index + 1} crosses ${label.text}`).toBe(false);
+    }
+  }
+  await noOverflow(page);
+  const artifacts = process.env.STUDIO_JOURNEY_ARTIFACTS;
+  if (artifacts && testInfo.project.name === 'desktop') {
+    await mkdir(artifacts, { recursive: true });
+    const name = `${theme}-${width}-${screen}`;
+    await tracker.screenshot({ path: path.join(artifacts, `${name}.png`) });
+    await writeFile(path.join(artifacts, `${name}.json`), JSON.stringify(geometry, null, 2));
+  }
+}
+
 for (const theme of themes) {
+  for (const width of [390, 836, 1024, 1440]) {
+    test(`${theme}: journey connector lane stays clear of text at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      let providerRequests = 0;
+      await page.route('**/api/**', route => {
+        if (new URL(route.request().url()).pathname === '/api/status') return route.fulfill({ json: {
+          ai: false, speech: false, ttsModel: 'bulbul:v4-flash', voices: ['shubh_enhi_companion'], defaultVoice: 'shubh_enhi_companion',
+        } });
+        providerRequests++;
+        return route.abort('blockedbyclient');
+      });
+      await page.goto('/');
+      await page.getByLabel('Theme', { exact: true }).selectOption(theme);
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('button', { name: 'Try an example', exact: true }).click();
+      await trackerLane(page, testInfo, theme, width, 'material');
+      await page.getByRole('button', { name: 'Continue with the example' }).click();
+      await trackerLane(page, testInfo, theme, width, 'questions');
+      await page.getByRole('button', { name: 'Put the bet under pressure' }).click();
+      await trackerLane(page, testInfo, theme, width, 'review');
+      await page.locator('input[value=test]').check();
+      await page.locator('#rationale').fill('Fictional layout check only. No validated evidence.');
+      await page.getByRole('button', { name: 'Create my decision pack' }).click();
+      await trackerLane(page, testInfo, theme, width, 'decision');
+      await page.getByRole('button', { name: 'Presenter Demo', exact: true }).click();
+      const demo = page.getByRole('region', { name: 'Presenter Demo', exact: true });
+      for (const [index, stage] of ['material', 'questions', 'review', 'decision'].entries()) {
+        await expect(demo.locator('.presenter-progress')).toContainText(`Demo stop ${index + 1} of 4`);
+        await trackerLane(page, testInfo, theme, width, `presenter-${stage}`);
+        if (index < 3) await demo.getByRole('button', { name: 'Next', exact: true }).click();
+      }
+      await demo.getByRole('button', { name: 'Exit demo' }).click();
+      await expect(page.locator('.human-decision')).toContainText('Fictional layout check only.');
+      expect(providerRequests).toBe(0);
+    });
+  }
+
   test(`${theme}: compact visual system retains readable controls and expandable learning content`, async ({ page }) => {
     const phone = page.viewportSize()!.width <= 700;
     await page.setViewportSize(phone ? { width: 390, height: 844 } : { width: 1440, height: 900 });
