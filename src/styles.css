@@ -544,7 +544,8 @@ details p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; fon
 .playback-bar span { flex: 1; font-size: 14px; }
 .playback-bar strong { display: block; font-size: 16px; }
 @media (max-width: 1000px) {
-  .hero { gap: 24px; }
+  .hero { grid-template-columns: 1fr; gap: 24px; }
+  .hero .studio-illustration { max-width: 760px; width: 100%; }
   .hero h1 { font-size: 60px; }
   .edition { display: none; }
   .hero-promise { gap: 12px; }

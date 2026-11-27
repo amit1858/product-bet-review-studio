@@ -101,6 +101,17 @@ for (const theme of themes) {
     await expect(method).toHaveAttribute('open', '');
     await expect(method.locator('p')).toBeVisible();
     await noOverflow(page);
+    await page.setViewportSize({ width: 836, height: 936 });
+    await page.goto('/');
+    const tabletTitle = await page.locator('.hero h1').evaluate(element => ({
+      height: element.getBoundingClientRect().height,
+      lineHeight: parseFloat(getComputedStyle(element).lineHeight),
+    }));
+    expect(tabletTitle.height).toBeLessThanOrEqual(tabletTitle.lineHeight * 3);
+    for (const width of await page.locator('.illustration-note').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().width))) {
+      expect(width).toBeGreaterThanOrEqual(200);
+    }
+    await noOverflow(page);
   });
 
   test(`${theme}: full journey, guide, contrast and responsive surfaces`, async ({ page }, testInfo) => {
