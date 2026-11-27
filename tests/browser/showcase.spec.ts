@@ -111,6 +111,10 @@ for (const theme of themes) {
     for (const width of await page.locator('.illustration-note').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().width))) {
       expect(width).toBeGreaterThanOrEqual(200);
     }
+    await page.getByRole('button', { name: 'Explore the illustrative review' }).click();
+    for (const width of await page.locator('.reasoning-trail li').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().width))) {
+      expect(width).toBeGreaterThanOrEqual(300);
+    }
     await noOverflow(page);
   });
 

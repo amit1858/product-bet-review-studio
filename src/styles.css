@@ -552,6 +552,8 @@ details p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; fon
   .hero-promise span + span::before { margin-right: 12px; }
   .studio-illustration { padding: 20px; }
   .example-copy { padding: 28px; }
+  .reasoning-trail ol { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reasoning-trail li:nth-child(odd) { border-left: 0; }
   .evidence-grid, .premortem-grid { grid-template-columns: repeat(2, 1fr); }
   .input-layout { grid-template-columns: 1fr 220px; gap: 28px; }
   .decision-options { grid-template-columns: repeat(2, 1fr); }
@@ -616,9 +618,9 @@ details p { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; fon
   .step-label > span { font-size: 13px; }
   .step-output { font-size: 13px; line-height: 1.3; }
   .journey li:not(:last-child)::after { top: 24px; left: calc(50% + 18px); width: calc(100% - 36px); }
-  .reasoning-trail ol { grid-auto-flow: row; grid-auto-columns: auto; }
+  .reasoning-trail ol { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr; }
   .reasoning-trail li { padding: 16px 20px; }
-  .reasoning-trail li + li { border-left: 0; border-top: 1px solid var(--studio-border); }
+  .reasoning-trail li + li { border-left: 0; }
   .trail-arrow { transform: rotate(90deg); }
   .reasoning-trail .trail-preview { -webkit-line-clamp: 2; }
   .guide-index { gap: 8px; }
