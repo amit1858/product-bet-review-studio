@@ -12,6 +12,11 @@ import { sampleClarification, sampleContext, sampleIdea, sampleReview } from './
 import { ReadAloud, SpeakInput, VoiceProvider } from './Voice';
 import { useDraft } from './useDraft';
 import { ProviderAccess, useCredentialAccess } from './Credentials';
+import { DecisionTrail, Journey, MaterialTrail, QuestionsTrail, ReviewTrail } from './Journey';
+import { Guide } from './Guide';
+import { ThemeSelector } from './Theme';
+import { BuilderGuide } from './BuilderGuide';
+import { Walkthrough } from './Walkthrough';
 
 type Stage = 'welcome' | 'material' | 'clarify' | 'review' | 'pack';
 const labels: Record<Decision, string> = { proceed: 'Proceed', test: 'Test first', reshape: 'Reshape', stop: 'Stop' };
@@ -19,13 +24,16 @@ const descriptions: Record<Decision, string> = {
   proceed: 'Commit with intention', test: 'Learn before you build',
   reshape: 'Keep the problem. Change the bet.', stop: 'Make room for a better bet',
 };
+const isGuideRoute = () => /^#guide(?:-(?:material|questions|review|decision|content))?$/.test(window.location.hash);
+const isBuilderRoute = () => /^#builder(?:-(?:methodology|prd|states|prompt|tests|privacy|readiness|example|content))?$/.test(window.location.hash);
+const learningRoute = () => isGuideRoute() ? 'guide' : isBuilderRoute() ? 'builder' : 'studio';
 
 function StudioIllustration() {
-  return <div className="studio-illustration" aria-label="A product bet moves from evidence through a challenge to a small test" role="img">
+  return <div className="studio-illustration" aria-label="Fictional example: a note about repeating last week's grocery order is a signal, not proof. Question whether convenience explains leaving, then propose a small test before deciding." role="img">
     <div className="illustration-top"><span className="eyebrow">THE THINKING TABLE</span><span className="folio">01 / 03</span></div>
     <div className="illustration-note evidence-note">
       <span className="note-label"><span className="status-dot" /> A signal</span>
-      <p>“I just want last week’s order.”</p><span className="note-foot">CUSTOMER NOTE · NOT YET PROOF</span>
+      <p>“I just want last week’s order.”</p><span className="note-foot">FICTIONAL CUSTOMER NOTE · NOT PROOF</span>
     </div>
     <div className="illustration-connector"><span /><ArrowRight size={22} /><span /></div>
     <div className="illustration-note challenge-note">
@@ -49,6 +57,12 @@ function ErrorNotice({ message, dismiss }: { message: string; dismiss: () => voi
 export function App() {
   const access = useCredentialAccess();
   const [stage, setStage] = useState<Stage>('welcome');
+  const [page, setPage] = useState(learningRoute);
+  const guideOpen = page === 'guide';
+  const builderOpen = page === 'builder';
+  const learningOpen = guideOpen || builderOpen;
+  const [tourIndex, setTourIndex] = useState<number | null>(null);
+  const tourEntry = useRef<HTMLButtonElement | null>(null);
   const [idea, setIdea] = useState('');
   const [context, setContext] = useState('');
   const [illustrative, setIllustrative] = useState(false);
@@ -71,7 +85,22 @@ export function App() {
   const heading = useRef<HTMLHeadingElement>(null);
   const ideaField = useRef<HTMLTextAreaElement>(null);
   const analysis = useRef<AbortController | null>(null);
+  const acceptedFragment = useRef(window.location.hash);
   const aiReady = access.configured.claude ? access.secure : !!providers?.ai;
+  useEffect(() => {
+    const changed = () => {
+      if ((busy || capturing) && learningRoute() !== 'studio') {
+        window.history.replaceState(null, '', acceptedFragment.current || '#studio');
+        setFeedback(capturing ? 'Add or discard your transcript before opening the guide.' : 'Wait for the current request to finish before opening the guide.');
+        return;
+      }
+      acceptedFragment.current = window.location.hash;
+      setPage(learningRoute());
+      setTourIndex(null);
+    };
+    window.addEventListener('hashchange', changed);
+    return () => window.removeEventListener('hashchange', changed);
+  }, [busy, capturing]);
   useEffect(() => {
     analysis.current?.abort(); analysis.current = null; setBusy('');
   }, [access.epoch]);
@@ -104,11 +133,28 @@ export function App() {
   }, []);
   useEffect(() => {
     setError(''); setFeedback('');
+    const guideSection = learningOpen && /^#(?:guide-(material|questions|review|decision)|builder-(methodology|prd|states|prompt|tests|privacy|readiness|example))$/.test(window.location.hash)
+      ? document.getElementById(window.location.hash.slice(1)) : null;
+    if (guideSection) {
+      guideSection.focus({ preventScroll: true });
+      guideSection.scrollIntoView({ behavior: 'instant', block: 'start' });
+      return;
+    }
     window.scrollTo({ top: 0, behavior: 'instant' });
     heading.current?.focus();
-  }, [stage]);
+  }, [stage, page]);
 
   const locked = !!busy || capturing;
+  function startTour(entry: HTMLButtonElement) {
+    if (locked) return;
+    tourEntry.current = entry; setTourIndex(0);
+    document.getElementById('tour-next')?.focus();
+  }
+  function closeTour() {
+    setTourIndex(null);
+    if (tourEntry.current?.isConnected && !tourEntry.current.disabled) tourEntry.current.focus();
+    else heading.current?.focus({ preventScroll: true });
+  }
   function go(next: Stage) { if (!locked) setStage(next); }
   function resetAnalysis() {
     setClarification(null); setResult(null); setDecision(null); setReviewInput(null); setAnswers({}); setRationale('');
@@ -171,7 +217,8 @@ export function App() {
     go('review');
   }
   const sources = reviewInput ? sourcesFor(reviewInput) : [];
-  const pack = result && decision ? decisionPack(result, decision, rationale, sources, illustrative) : '';
+  const guideUrl = new URL('/#guide', window.location.origin).href;
+  const pack = result && decision ? `${decisionPack(result, decision, rationale, sources, illustrative)}\n\n## Build your own Product Bet\n\n[Open the static Product Bet guide](${guideUrl})\n\nThe hosted guide remains subject to this Studio's access policy.` : '';
   const story = result ? leadershipStory(result) : [];
   const spokenPack = result && decision ? [
     illustrative ? 'Illustrative example. Not verified research.' : 'AI-assisted review. Not independently verified.',
@@ -208,27 +255,27 @@ export function App() {
     resetAnalysis(); draft.resumeSaving(); go('material');
   }
 
-  return <VoiceProvider providers={providers} online={online} onCaptureChange={setCapturing} sessionKey={stage}><div className="app">
-    <a className="skip-link" href="#main">Skip to content</a>
+  return <VoiceProvider providers={providers} online={online} onCaptureChange={setCapturing} sessionKey={learningOpen ? page : stage}><div className="app">
+    <a className="skip-link" href={guideOpen ? '#guide-content' : builderOpen ? '#builder-content' : '#main'}>Skip to content</a>
     <header className="site-header">
-      <button className="brand" onClick={() => go('welcome')} disabled={locked} aria-label="Product Bet Review Studio home">
+      <button className="brand" onClick={() => { if (!locked) { go('welcome'); if (learningOpen) window.location.hash = 'studio'; } }} disabled={locked} aria-label="Product Bet Review Studio home">
         <span className="brand-mark"><Layers3 size={24} /></span><span>Product Bet<span className="brand-sub">REVIEW STUDIO</span></span>
       </button>
-      <div className="header-right"><span className="edition">A WORKSPACE FOR BETTER JUDGMENT</span><span className="private-pill"><ShieldCheck size={14} /> Private by default</span></div>
+      <div className="header-right"><span className="edition">A WORKSPACE FOR BETTER JUDGMENT</span><span className="private-pill"><ShieldCheck size={14} /> Private by default</span><ThemeSelector /></div>
     </header>
-    <ProviderAccess providers={providers} />
+    {!learningOpen && <ProviderAccess providers={providers} />}
     {!online && <div className="connectivity" role="status">You’re offline. The example and text editing work; AI and speech require internet. Unsent text is not saved automatically.</div>}
     <main id="main">
-      {stage !== 'welcome' && <nav className="journey" aria-label="Review stages">
-        {([{ s: 'material', n: '01', label: 'The material', enabled: true }, { s: 'clarify', n: '02', label: 'The questions', enabled: !!clarification }, { s: 'review', n: '03', label: 'The review', enabled: !!result }, { s: 'pack', n: '04', label: 'Your decision', enabled: !!decision && !!rationale.trim() }] as const).map(item =>
-          <button key={item.s} className={stage === item.s ? 'current' : ''} disabled={!item.enabled || locked} onClick={() => go(item.s)} aria-current={stage === item.s ? 'step' : undefined}><span>{item.n}</span>{item.label}</button>)}
-      </nav>}
+      {guideOpen ? <Guide heading={heading} /> : builderOpen ? <BuilderGuide heading={heading} /> : <>
+      {stage !== 'welcome' && <Journey stage={stage} clarified={!!clarification} reviewed={!!result} decided={!!decision && !!rationale.trim()} locked={locked} onGo={go} />}
+      {stage !== 'welcome' && <div className="learning-actions"><button className="text-button" disabled={locked} onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><a className="text-button" href="#builder" aria-disabled={locked} onClick={event => { if (locked) event.preventDefault(); }}>Build an app like this <ArrowUpRight size={15} /></a>{tourIndex !== null && <button className="text-button" onClick={() => { document.getElementById('tour-next')?.focus(); }}>Return to tour</button>}</div>}
       {error && <ErrorNotice message={error} dismiss={() => setError('')} />}
       {updateReady && <div className="notice" role="status"><Sparkles size={18} /><span>A new Studio version is ready. Finish and export your decision, then close all Studio tabs and reopen. We won’t reload or discard your work automatically.</span></div>}
       {feedback && <div className="notice" role="status"><Check size={18} /><span>{feedback}</span></div>}
       {draft.error && <div className="notice error" role="alert"><ShieldCheck size={18} /><span>{draft.error}</span><button className="text-button" onClick={draft.forget}>Delete stored draft</button></div>}
       {draft.saved && !draft.keeping && (stage === 'welcome' || stage === 'material') && <div className="notice"><FileText size={18} /><span>You previously chose to keep a draft on this device. It has not been submitted or automatically restored.</span><button className="text-button" onClick={restoreDraft} disabled={locked}>Restore draft</button><button className="text-button" onClick={draft.forget}>Delete</button></div>}
       {busy && <div className="notice loading" role="status"><span className="spinner" /><span>{busy}<small>You can keep your material. Nothing is submitted twice automatically.</small></span></div>}
+      {tourIndex !== null && <Walkthrough index={tourIndex} stage={stage} locked={locked} onIndex={setTourIndex} onClose={closeTour} />}
       {stage === 'welcome' && <>
         <section className="hero">
           <div className="hero-copy">
@@ -237,6 +284,8 @@ export function App() {
             <p className="hero-description">An idea is a starting point. Not a verdict.<br className="desktop-break" /> Turn your rough notes into a thoughtful challenge, a small test, and a decision you can stand behind.</p>
             <div className="hero-actions"><button className="button primary" onClick={() => begin(true)}>Try an example <ArrowRight size={18} /></button><button className="button secondary" onClick={() => begin(false)}><Clipboard size={17} /> Paste my idea</button></div>
             <button className="text-button speak-entry" onClick={() => { begin(false); setFeedback('Use Speak below the idea field. You choose when recording starts; English, Hindi, and mixed speech are supported.'); }}><Mic size={17} /> Prefer to talk it through? <span>Speak your idea</span><ArrowUpRight size={15} /></button>
+            <a className="text-button guide-entry" href="#guide"><FileText size={17} /> Build your own Product Bet <ArrowUpRight size={15} /></a>
+            <div className="hero-learning"><button className="text-button" onClick={event => startTour(event.currentTarget)}>Take a guided tour</button><a className="text-button" href="#builder">Build an app like this <ArrowUpRight size={15} /></a></div>
             <div className="hero-promise"><span>No accounts.</span><span>No automatic saving.</span><span>You make the call.</span></div>
           </div>
           <StudioIllustration />
@@ -259,13 +308,14 @@ export function App() {
         {illustrative && <div className="notice"><Sparkles size={18} /><span>You’re exploring a fictional example. Editing the material switches to live Claude analysis.{aiReady && <button className="text-button" onClick={() => setIllustrative(false)} disabled={locked}>Run this example with Claude <ArrowRight size={15} /></button>}</span></div>}
         <div className="input-layout"><div className="material-form">
           <label className="field-label" htmlFor="idea">What’s the product bet?<span>The problem, the people, and the change you have in mind.</span></label>
-          <textarea id="idea" ref={ideaField} value={idea} onChange={e => editMaterial(e.target.value, 'idea')} maxLength={4000} rows={5} disabled={!!busy} placeholder="We believe that helping [which people] do [what] will improve [which outcome], because…" />
+          <textarea id="idea" data-tour-target="material" ref={ideaField} value={idea} onChange={e => editMaterial(e.target.value, 'idea')} maxLength={4000} rows={5} disabled={!!busy} placeholder="We believe that helping [which people] do [what] will improve [which outcome], because…" />
           <SpeakInput label="idea" onApply={text => appendTranscript(text, 'idea')} disabled={!!busy} />
           <div className="field-meta"><span>English, Hindi, or a mix. Your words, first.</span><span>{idea.length.toLocaleString()} / 4,000</span></div>
           <label className="field-label" htmlFor="context">What material supports it? <span className="optional">Optional</span><span>Customer feedback, numbers, observations, constraints. Include where each came from.</span></label>
           <textarea id="context" value={context} onChange={e => editMaterial(e.target.value, 'context')} maxLength={14000} rows={9} disabled={!!busy} placeholder={'Customer feedback: “…” — from three interviews last week\nMetrics: … — from our funnel report\nConstraints: …\nWhat we don’t know yet: …'} />
           <SpeakInput label="supporting material" onApply={text => appendTranscript(text, 'context')} disabled={!!busy} />
           <div className="field-meta"><span>No uploads or external research. Just what you bring.</span><span>{context.length.toLocaleString()} / 14,000</span></div>
+          <MaterialTrail idea={idea} context={context} illustrative={illustrative} />
           <div className="draft-consent"><label><input type="checkbox" checked={draft.keeping} onChange={e => draft.choose(e.target.checked)} /><span>Keep this unsent draft on this device</span></label><small>Optional. Saves only the idea and supporting text in this browser. Browser storage is not encrypted. No recordings, answers, reviews, or decisions. Uncheck to delete it; anyone using this browser may read it.</small></div>
           <div className="form-actions"><button className="button primary" onClick={() => void runClarification()} disabled={locked || (!illustrative && (!online || !aiReady))}>{illustrative ? 'Continue with the example' : 'Find the useful questions'}<ArrowRight size={18} /></button><span>{capturing ? 'Add or discard your transcript first.' : 'Up to four questions.'}<br />No endless interview.</span></div>
           {!illustrative && !aiReady && <div className="notice"><CircleHelp size={18} /><span>{access.configured.claude ? 'Your tab key cannot be sent from HTTP. Open the HTTPS Studio URL, or remove it to use any host/demo configuration.' : statusError || 'Live Claude is not configured. Add an optional tab key over HTTPS or configure ANTHROPIC_API_KEY on your own server; the illustrative example is available without it.'}<button className="text-button" onClick={() => void refreshStatus()}>Check connection again</button></span></div>}
@@ -274,7 +324,7 @@ export function App() {
       {stage === 'clarify' && clarification && <section className="workspace">
         <div className="page-heading"><p className="eyebrow">02 / THE QUESTIONS</p><h1 tabIndex={-1} ref={heading}>A little clarity.<br /><em>A stronger review.</em></h1><p>Answer what you can. Leave the rest blank—we’ll keep it as an unknown, not fill it in.</p></div>
         {illustrative && <div className="notice"><Sparkles size={18} /><span>Illustrative walkthrough. These questions and the next review are pre-authored; answers are not analyzed by Claude. Use your own bet for live analysis.</span></div>}
-        <div className="understanding-card"><label className="field-label" htmlFor="understanding">The bet, as understood<span>Correct this interpretation before the review.</span></label><textarea id="understanding" value={understanding} maxLength={2000} rows={3} disabled={!!busy} onChange={e => { setUnderstanding(e.target.value); invalidateReview(); if (illustrative) { setIllustrative(false); setFeedback('Corrected interpretation will be analyzed by live Claude.'); } }} /></div>
+        <div className="understanding-card" data-tour-target="clarify"><label className="field-label" htmlFor="understanding">The bet, as understood<span>Correct this interpretation before the review.</span></label><textarea id="understanding" value={understanding} maxLength={2000} rows={3} disabled={!!busy} onChange={e => { setUnderstanding(e.target.value); invalidateReview(); if (illustrative) { setIllustrative(false); setFeedback('Corrected interpretation will be analyzed by live Claude.'); } }} /></div>
         <div className="questions">{clarification.questions.map((q, index) => <article className="question-card" key={q.id}>
           <span className="question-number">0{index + 1}</span><div><h3>{q.question}</h3><ReadAloud text={q.question} label={`question ${index + 1}`} /><p className="quiet">{q.why}</p><label className="sr-only" htmlFor={q.id}>Answer to question {index + 1}</label><textarea id={q.id} rows={3} maxLength={2000} placeholder="What you know—or what you still need to find out…" value={answers[q.id] ?? ''} disabled={!!busy} onChange={e => answerQuestion(q.id, e.target.value)} /><SpeakInput label={`answer ${index + 1}`} disabled={!!busy} onApply={text => {
             const current = answers[q.id] ?? ''; const value = current ? `${current}\n\n${text}` : text;
@@ -283,13 +333,15 @@ export function App() {
           }} /><div className="field-meta"><span>Blank = unknown, not assumed.</span><span>{(answers[q.id] ?? '').length} / 2,000</span></div></div>
         </article>)}</div>
         {!clarification.questions.length && <div className="notice"><Check size={18} /><span>Your supplied material covers the essential questions. You can correct the interpretation and move to the review.</span></div>}
+        <QuestionsTrail clarification={clarification} understanding={understanding} answers={answers} />
         <div className="form-actions"><button className="button primary" onClick={() => void runReview()} disabled={locked || (!illustrative && (!online || !aiReady))}>Put the bet under pressure <ArrowRight size={18} /></button><button className="text-button" onClick={() => go('material')} disabled={locked}><ChevronLeft size={17} /> Revisit material</button></div>
       </section>}
       {stage === 'review' && result && <section className="workspace review-workspace">
         <div className="review-title"><div><p className="eyebrow">03 / THE REVIEW</p><h1 tabIndex={-1} ref={heading}>{result.title}</h1><p>A thoughtful challenge. Not a verdict.</p></div><div className="review-origin"><span className="status-dot" />{illustrative ? 'ILLUSTRATIVE EXAMPLE' : 'CLAUDE-ASSISTED REVIEW'}<small>Not independently verified</small></div></div>
         <div className="review-topline"><span><FileText size={16} /> {sources.length} supplied sources</span><span><CircleHelp size={16} /> {result.assumptions.length} assumptions to challenge</span><button className="text-button" onClick={() => go('clarify')}>Correct the bet <ArrowUpRight size={16} /></button></div>
         <div className="bet-summary"><span className="eyebrow">THE BET AS UNDERSTOOD</span><p>{result.bet}</p><ReadAloud text={result.bet} label="the bet as understood" /></div>
-        <nav className="review-anchors" aria-label="Review sections"><a href="#signals">Signals & gaps</a><a href="#challenge">The challenge</a><a href="#premortem">Pre-mortem</a><a href="#test">Smallest test</a><a href="#decision">Your call</a></nav>
+        <ReviewTrail review={result} illustrative={illustrative} />
+        <nav className="review-anchors" data-tour-target="review" aria-label="Review sections"><a href="#signals">Signals & gaps</a><a href="#challenge">The challenge</a><a href="#premortem">Pre-mortem</a><a href="#test">Smallest test</a><a href="#decision">Your call</a></nav>
         <section id="signals" className="review-section">
           <div className="section-title"><span className="section-number">01</span><div><h2>What we know. What we don’t.</h2><p>User-provided claims are signals—not independently verified facts.</p></div></div>
           <div className="evidence-grid">{result.evidence.map((e, i) => <article className="evidence-card" key={i}>
@@ -313,7 +365,7 @@ export function App() {
           <ReadAloud text={`Proposed failure path, not a prediction. ${p.path}\nEarly signal: ${p.signal}\nReduce the risk: ${p.mitigation}`} label={`pre-mortem path ${i + 1}`} />
         </article>)}</div></section>
         <section id="test" className="test-canvas"><div className="test-heading"><FlaskConical size={27} /><div><span className="eyebrow">04 / THE CHEAPEST MEANINGFUL TEST</span><h2>{result.test.title}</h2></div><span className="test-tag">PROPOSED · NOT RUN</span></div><p className="test-hypothesis">{result.test.hypothesis}</p><ReadAloud text={`Proposed test, not run. ${result.test.title}\n${result.test.method}\nContinue if: ${result.test.success}\nStop if: ${result.test.stop}`} label="the proposed test" /><div className="test-method"><span className="card-label">HOW TO LEARN</span><p>{result.test.method}</p></div><div className="test-criteria"><div><span className="card-label evidence-label">A REASON TO CONTINUE</span><p>{result.test.success}</p></div><div><span className="card-label">A REASON TO STOP OR RESHAPE</span><p>{result.test.stop}</p></div></div><div className="test-footer"><span><strong>Timebox</strong>{result.test.timebox}</span><span><strong>Estimated effort</strong>{result.test.cost}</span></div></section>
-        <section id="decision" className="decision-section"><div className="section-title"><span className="section-number">05</span><div><h2>The agent advises. You decide.</h2><p>The recommendation is a starting point. Your decision is the record.</p></div></div><div className="recommendation"><span className="eyebrow">AGENT RECOMMENDATION</span><div><strong>{labels[result.recommendation.decision]}</strong><span className="confidence">{result.recommendation.confidence} confidence</span></div><p>{result.recommendation.basis}</p><ReadAloud text={`Agent recommendation, advisory only: ${result.recommendation.decision}. ${result.recommendation.confidence} confidence. ${result.recommendation.basis}\nWould change if: ${result.recommendation.wouldChangeIf}`} label="the agent recommendation" /><details><summary>What would change this recommendation?</summary><p>{result.recommendation.wouldChangeIf}</p></details></div><fieldset className="decision-options"><legend>Your next move</legend>{result.options.map(o => <label key={o.decision} className={`decision-option ${decision === o.decision ? 'selected' : ''}`}><input type="radio" name="decision" value={o.decision} checked={decision === o.decision} onChange={() => setDecision(o.decision)} /><span className="radio-mark">{decision === o.decision && <Check size={14} />}</span><strong>{labels[o.decision]}</strong><span>{descriptions[o.decision]}</span><p>{o.rationale}</p></label>)}</fieldset><label className="field-label" htmlFor="rationale">Why this decision?<span>Your reasoning, conditions, and what should happen next. This is your voice, not the agent’s.</span></label><textarea id="rationale" value={rationale} onChange={e => setRationale(e.target.value)} rows={4} maxLength={3000} placeholder="I’m choosing this direction because… We’ll reconsider if…" /><div className="form-actions"><button className="button primary" disabled={!decision || !rationale.trim()} onClick={() => go('pack')}>Create my decision pack <ArrowRight size={18} /></button><span>Select a direction and record your rationale.<br />No decision is made for you.</span></div></section>
+        <section id="decision" className="decision-section"><div className="section-title"><span className="section-number">05</span><div><h2>The agent advises. You decide.</h2><p>The recommendation is a starting point. Your decision is the record.</p></div></div><DecisionTrail review={result} decision={decision} rationale={rationale} /><div className="recommendation"><span className="eyebrow">AGENT RECOMMENDATION</span><div><strong>{labels[result.recommendation.decision]}</strong><span className="confidence">{result.recommendation.confidence} confidence</span></div><p>{result.recommendation.basis}</p><ReadAloud text={`Agent recommendation, advisory only: ${result.recommendation.decision}. ${result.recommendation.confidence} confidence. ${result.recommendation.basis}\nWould change if: ${result.recommendation.wouldChangeIf}`} label="the agent recommendation" /><details><summary>What would change this recommendation?</summary><p>{result.recommendation.wouldChangeIf}</p></details></div><fieldset className="decision-options"><legend>Your next move</legend>{result.options.map(o => <label key={o.decision} className={`decision-option ${decision === o.decision ? 'selected' : ''}`}><input type="radio" name="decision" value={o.decision} checked={decision === o.decision} onChange={() => setDecision(o.decision)} /><span className="radio-mark">{decision === o.decision && <Check size={14} />}</span><strong>{labels[o.decision]}</strong><span>{descriptions[o.decision]}</span><p>{o.rationale}</p></label>)}</fieldset><label className="field-label" htmlFor="rationale">Why this decision?<span>Your reasoning, conditions, and what should happen next. This is your voice, not the agent’s.</span></label><textarea id="rationale" value={rationale} onChange={e => setRationale(e.target.value)} rows={4} maxLength={3000} placeholder="I’m choosing this direction because… We’ll reconsider if…" /><div className="form-actions"><button className="button primary" disabled={!decision || !rationale.trim()} onClick={() => go('pack')}>Create my decision pack <ArrowRight size={18} /></button><span>Select a direction and record your rationale.<br />No decision is made for you.</span></div></section>
       </section>}
       {stage === 'pack' && result && decision && <section className="workspace pack-workspace">
         <div className="page-heading">
@@ -321,12 +373,14 @@ export function App() {
           <h1 tabIndex={-1} ref={heading}>A decision worth<br /><em>putting on the table.</em></h1>
           <p>Ready for a team conversation. Nothing is published automatically.</p>
         </div>
-        <div className="pack-actions">
+        <a className="text-button guide-entry" href="#guide"><FileText size={17} /> Build your own Product Bet <ArrowUpRight size={15} /></a>
+        <div className="pack-actions" data-tour-target="pack">
           <button className="button primary" onClick={() => void copyPack()}><Clipboard size={17} /> Copy pack</button>
           <button className="button secondary" onClick={downloadPack}><Download size={17} /> Export Markdown</button>
           <ReadAloud text={spokenPack} label="the final decision pack" />
           <button className="text-button" onClick={() => go('review')}>Edit decision <ArrowUpRight size={16} /></button>
         </div>
+        <DecisionTrail review={result} decision={decision} rationale={rationale} />
         <article className="decision-document">
           <div className="document-masthead"><span>PRODUCT BET / DECISION RECORD</span><span>{illustrative ? 'ILLUSTRATIVE EXAMPLE' : 'AI-ASSISTED · UNVERIFIED'}</span></div>
           <h2>{result.title}</h2>
@@ -345,7 +399,8 @@ export function App() {
           <div className="document-footer"><ShieldCheck size={17} /><span>PM-owned decision. Source-linked analysis. No automatic sharing.</span></div>
         </article>
       </section>}
+      </>}
     </main>
-    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span><div><span>Claude for thinking · Sarvam for voice</span><span>{access.configured.claude ? 'Claude: your tab key' : providers?.ai ? 'Claude: host/demo key' : 'Claude not configured'} / {access.configured.sarvam ? 'Sarvam: your tab key' : providers?.speech ? 'Sarvam: host/demo key' : 'Voice not configured'}</span></div><p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
+    <footer className="site-footer"><span className="footer-brand">Better questions. Smaller risks. Human decisions.</span>{!learningOpen && <div><span>Claude for thinking · Sarvam for voice</span><span>{access.configured.claude ? 'Claude: your tab key' : providers?.ai ? 'Claude: host/demo key' : 'Claude not configured'} / {access.configured.sarvam ? 'Sarvam: your tab key' : providers?.speech ? 'Sarvam: host/demo key' : 'Voice not configured'}</span></div>}<p>Session-only by default. AI and speech need internet. Provider retention policies apply.</p></footer>
   </div></VoiceProvider>;
 }

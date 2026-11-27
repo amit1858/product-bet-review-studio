@@ -67,7 +67,7 @@ test('real waiting worker preserves active input, activates after tabs close and
     release.update();
     await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration())!.update(); });
     const installed = await nextWorker;
-    await expect(page.getByRole('status')).toContainText('close all Studio tabs');
+    await expect(page.getByRole('status').filter({ hasText: 'close all Studio tabs' })).toBeVisible();
     await expect(page.locator('#idea')).toHaveValue('Keep this synthetic working text until I finish.');
     expect(await page.evaluate(() => caches.keys())).toEqual(expect.arrayContaining(['product-bet-studio-test-release-1', 'product-bet-studio-test-release-2']));
     await page.close();

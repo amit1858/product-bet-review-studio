@@ -170,10 +170,10 @@ test('opt-in draft survives offline reload; shell caching never stores API respo
   expect(cached.some(url => /\/assets\/.*\.js$/.test(url))).toBe(true);
 });
 
-test('light styling ignores the OS and obsolete theme hints while retaining contrast', async ({ page }) => {
+test('Paper defaults independently of the OS and obsolete theme hints while retaining contrast', async ({ page }) => {
   await page.goto('/?clawpilotTheme=dark');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
-  expect(await page.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper');
   expect(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(252, 251, 248)');
   const ratios = await page.evaluate(() => {
     function luminance(color: string) {
@@ -338,7 +338,7 @@ test('waiting updates never reload or discard active text', async ({ page }) => 
   await page.getByRole('button', { name: 'Paste my idea' }).click();
   await page.locator('#idea').fill('Finish this synthetic review before updating.');
   await page.evaluate(() => window.dispatchEvent(new Event('studio-update-ready')));
-  await expect(page.getByRole('status')).toContainText('close all Studio tabs');
+  await expect(page.getByRole('status').filter({ hasText: 'close all Studio tabs' })).toBeVisible();
   await expect(page.locator('#idea')).toHaveValue('Finish this synthetic review before updating.');
 });
 
