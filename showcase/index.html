@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Turn a product idea and its supporting material into questions, a small proposed test and a human-owned decision.">
+  <meta name="referrer" content="no-referrer">
+  <title>Product Bet Review Studio — An idea is a bet. Not a verdict.</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+  </style>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./showcase.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the product story</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true">PB</span><span>Product Bet<br>Review Studio</span></a>
+    <nav aria-label="Product story"><a href="#method">The method</a><a href="#walkthrough">Inside the app</a><a href="#build">Build from it</a><a href="#trust">Trust &amp; limits</a></nav>
+    <button id="theme-toggle" class="quiet-button" type="button" hidden>Switch theme</button>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">A product studio. Not a prediction engine.</p>
+        <h1 id="hero-title">An idea is a bet.<br><em>Not a verdict.</em></h1>
+        <p class="lead">Bring the signal. Question the leap. Design a small test. Make a decision you can explain.</p>
+        <p>Product Bet Review Studio helps turn scattered material into a considered, human-owned decision—before a team commits to building.</p>
+        <div class="actions"><a class="button primary" data-live-app href="https://product-bet-review-studio-production.up.railway.app">Open the live app ↗</a><a class="button secondary" href="#method">Explore the method <span aria-hidden="true">↓</span></a></div>
+        <p class="access-note" data-access-note>Protected app: ask the host for the production passphrase. The fictional example and Presenter Demo need no provider keys; live analysis and voice need separate provider setup.</p>
+      </div>
+      <figure class="hero-canvas">
+        <div class="frame-label"><span>From a signal to a useful challenge</span><span>Fictional example</span></div>
+        <a href="./assets/review.webp" target="_blank" rel="noopener noreferrer" aria-label="Open full-size fictional Review screenshot"><img src="./assets/review.webp" width="1440" height="900" alt="Approved app review showing supplied signals, source limitations, a counterargument and a proposed small test. All content is fictional and unverified."></a>
+        <figcaption><strong>Convenience is not proof of retention.</strong><span>A useful question to investigate. Not a research finding.</span></figcaption>
+      </figure>
+    </section>
+    <section class="problem wrap" aria-labelledby="problem-title">
+      <div><p class="eyebrow">The problem with a promising idea</p><h2 id="problem-title">Momentum can outrun the evidence.</h2></div>
+      <div><p>A quote becomes a trend. A friction becomes a feature. A confident answer starts to feel like permission to build.</p><p>This studio keeps the original claim, what it does not establish, and the next learning choice in the same conversation. AI can help organize and challenge supplied material. It cannot turn it into independent validation.</p></div>
+    </section>
+    <section id="method" class="section wrap" aria-labelledby="method-title">
+      <div class="section-heading"><div><p class="eyebrow">The method / four connected moves</p><h2 id="method-title">Keep the reasoning connected.</h2></div><p>Each output becomes the next input. Your judgment stays in the loop.</p></div>
+      <ol class="method-map">
+        <li class="signal"><a href="#stage-signal"><span class="marker">01</span><strong>Signal</strong><span>Material with provenance and limits</span></a></li>
+        <li class="question"><a href="#stage-question"><span class="marker">02</span><strong>Question</strong><span>An interpretation, with unknowns intact</span></a></li>
+        <li class="test"><a href="#stage-test"><span class="marker">03</span><strong>Test</strong><span>A challenge and a proposed small test</span></a></li>
+        <li class="decision"><a href="#stage-decision"><span class="marker">04</span><strong>Decision</strong><span>A human choice, with a rationale</span></a></li>
+      </ol>
+      <p class="note">Select a stage below for what goes in, what comes out and where human judgment remains.</p>
+      <div class="stage-grid">
+        <details id="stage-signal" class="stage signal"><summary><span class="stage-number">01 / Signal</span><strong>Bring what you actually know.</strong></summary><div class="stage-body"><dl><dt>You bring</dt><dd>A product hypothesis, quotes, observations or constraints, with source labels and limits.</dd><dt>The studio helps produce</dt><dd>A coherent starting point for useful questions.</dd><dt>You still judge</dt><dd>Whether the material is relevant, permissioned and representative. A supplied claim is not proof.</dd></dl><a class="text-link" href="#screen-material">See the Material screen →</a></div></details>
+        <details id="stage-question" class="stage question"><summary><span class="stage-number">02 / Question</span><strong>Make uncertainty visible.</strong></summary><div class="stage-body"><dl><dt>You bring</dt><dd>Corrections to the interpretation and answers you can support. Leave the rest blank.</dd><dt>The studio helps produce</dt><dd>An accepted interpretation, clarification answers and explicit gaps.</dd><dt>You still judge</dt><dd>What is known and what might change your mind. An unanswered question is not an invitation to invent.</dd></dl><a class="text-link" href="#screen-questions">See the Questions screen →</a></div></details>
+        <details id="stage-test" class="stage test"><summary><span class="stage-number">03 / Test</span><strong>Challenge the leap. Learn cheaply.</strong></summary><div class="stage-body"><dl><dt>You bring</dt><dd>The accepted interpretation and supporting material from the previous stages.</dd><dt>The studio helps produce</dt><dd>A source-linked review, counterargument, failure paths and a proposed small test.</dd><dt>You still judge</dt><dd>The quality of the reasoning and the feasibility of the test. Checking a quotation's source does not establish truth or causation.</dd></dl><a class="text-link" href="#screen-review">See the Review screen →</a></div></details>
+        <details id="stage-decision" class="stage decision"><summary><span class="stage-number">04 / Decision</span><strong>Make the call. Keep the why.</strong></summary><div class="stage-body"><dl><dt>You bring</dt><dd>Your choice—proceed, test first, reshape or stop—and your rationale.</dd><dt>The studio helps produce</dt><dd>A decision pack and leadership narrative, deliberately copied or exported as Markdown.</dd><dt>You still judge</dt><dd>The decision. You can disagree with the agent. Exporting a pack is not publishing it or validating its claims.</dd></dl><a class="text-link" href="#screen-decision">See the Decision screen →</a></div></details>
+      </div>
+    </section>
+    <section id="walkthrough" class="section wrap" aria-labelledby="walkthrough-title">
+      <div class="section-heading"><div><p class="eyebrow">Inside the application</p><h2 id="walkthrough-title">One bet. A visible chain of reasoning.</h2></div><p>Genuine screenshots of the approved application. Expand a screen to look closer.</p></div>
+      <p class="boundary">Every quote, number, analysis and decision pictured here is <strong>fictional and unverified</strong>. No research or test was conducted. Captured locally from candidate <code>bd5107f</code> without provider calls, credentials or authenticated browser state.</p>
+      <div class="screens">
+        <details id="screen-material"><summary><span>01 / Material</span><strong>A hypothesis and its supplied signals</strong></summary><figure><a href="./assets/material.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/material.webp" width="1440" height="900" loading="lazy" alt="Fictional Material stage: a grocery-reorder hypothesis, supporting material, explicit example notice and the stage navigator."></a><figcaption>Your material carries forward. Editing upstream work invalidates downstream analysis.</figcaption></figure></details>
+        <details id="screen-questions"><summary><span>02 / Questions</span><strong>Correct the interpretation. Leave gaps unknown.</strong></summary><figure><a href="./assets/questions.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/questions.webp" width="1440" height="900" loading="lazy" alt="Fictional Questions stage showing an editable interpretation and pre-authored clarification questions, not live model output."></a><figcaption>Accepted interpretation and answers become the review's context. Illustrative answers do not change the prewritten example review.</figcaption></figure></details>
+        <details id="screen-review"><summary><span>03 / Review</span><strong>A claim beside its limitation</strong></summary><figure><a href="./assets/review.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/review.webp" width="1440" height="900" loading="lazy" alt="Fictional Review stage with source-linked reasoning and a visibly illustrative example badge."></a><figcaption>Evidence, limitations and alternative explanations stay distinct. A proposed test is not a measured result.</figcaption></figure></details>
+        <details id="screen-decision"><summary><span>04 / Decision pack</span><strong>Your decision is not the agent's verdict.</strong></summary><figure><a href="./assets/decision.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/decision.webp" width="1440" height="900" loading="lazy" alt="Fictional Decision pack with a proposed learning path, the human decision and explicit copy/export actions."></a><figcaption>The human's choice and rationale remain separate from the advisory recommendation.</figcaption></figure></details>
+      </div>
+      <h3 class="paths-title">Three ways in. Three different jobs.</h3>
+      <div class="paths">
+        <article><span class="eyebrow">Learn the controls</span><h3>Guided tour</h3><p>An optional, replayable orientation alongside your own work. It highlights controls without changing material or advancing workflow stages.</p><details><summary>See the guided tour</summary><a href="./assets/tour.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/tour.webp" width="1440" height="900" loading="lazy" alt="Actual guided-tour panel with Back, Next and Skip controls, highlighting orientation rather than automatic workflow progression."></a></details></article>
+        <article><span class="eyebrow">Explore independently</span><h3>Try an example</h3><p>Walk through the four stages with pre-authored fictional material. No provider keys are needed. Editing the bet or interpretation switches to live analysis, which requires configuration.</p><a class="text-link" href="#availability">What you need to try it →</a></article>
+        <article><span class="eyebrow">Show the whole journey</span><h3>Presenter Demo</h3><p>A separate, deterministic click-through with Back, Next, Replay, Exit and hideable talking points. It does not call providers, request the microphone or overwrite your work.</p><details><summary>See Presenter Demo</summary><a href="./assets/presenter.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/presenter.webp" width="1440" height="900" loading="lazy" alt="Actual Presenter Demo clearly labeled fictional and unverified, with its separate progression controls."></a></details></article>
+      </div>
+    </section>
+    <section id="build" class="section wrap" aria-labelledby="build-title">
+      <div class="section-heading"><div><p class="eyebrow">Take the method with you</p><h2 id="build-title">Build the thinking.<br>Then build the product.</h2></div><p>Two authored packs. Neither includes user work or private app configuration.</p></div>
+      <div class="build-grid">
+        <article class="card"><span class="eyebrow">For your product bet</span><h3>Start with the problem, not the feature.</h3><p>Use a blank starter to name the user, evidence, uncertainty, challenge, small test and human decision. In the app, <strong>Build your own Product Bet</strong> explains how these hand off across stages.</p><a class="button secondary" href="./assets/product-bet-starter.md" download>Download the idea starter</a><a class="text-link" data-live-guide href="https://product-bet-review-studio-production.up.railway.app/#guide">Open the in-app idea guide ↗</a></article>
+        <article class="card"><span class="eyebrow">For builders of a similar app</span><h3>A method, not a magic prompt.</h3><p>Start with a real problem, choose tools deliberately, write a buildable PRD, map states and ship small slices. Review the work—and review the review.</p><a class="button primary" href="./assets/product-building-pack.md" download>Download the builder pack</a><a class="text-link" data-live-builder href="https://product-bet-review-studio-production.up.railway.app/#builder">Open the in-app builder guide ↗</a></article>
+      </div>
+      <details class="wide-detail"><summary>What is in the actual builder pack?</summary><div><p>The pack is generated from the approved app's authored content: methodology, PRD and agent-prompt templates, screen/state, test/accessibility, privacy/credential and readiness checklists, plus a clearly fictional worked example.</p><p>Responsible AI boundaries are part of the method: no invented research, no automatic decision, mocked provider tests and a separate human release gate.</p><a href="./assets/builder.webp" target="_blank" rel="noopener noreferrer"><img src="./assets/builder.webp" width="1440" height="900" loading="lazy" alt="Actual Build an app like this guide, with its separate methodology and copy/download build-pack actions."></a></div></details>
+    </section>
+    <section id="trust" class="section wrap" aria-labelledby="trust-title">
+      <div class="section-heading"><div><p class="eyebrow">Trust is a boundary, not a badge</p><h2 id="trust-title">Useful assistance.<br>Explicit limits.</h2></div><p>No claims of independently validated research, automatic certainty or complete production validation.</p></div>
+      <div class="trust-grid">
+        <article class="card"><h3>Session-first, not “nothing ever leaves.”</h3><p>Work stays in app memory by default. Refreshing clears session work and personal keys. Only explicit draft consent saves the idea and supporting-material fields on that device; the user can remove that draft. An explicitly selected app theme is also saved.</p><p>There is no app review database. A live analysis or speech action sends the relevant content through the same-origin backend to its provider. Provider retention policies and operational hosting controls are separate considerations.</p></article>
+        <article class="card"><h3>Keys and voice are separate setup.</h3><p>Personal Claude and Sarvam keys, when used, stay in tab memory until cleared or the page is left/refreshed. They pass through the trusted same-origin HTTPS backend for the selected operation, not directly from the browser to the provider.</p><p>Real analysis needs provider configuration. Voice additionally needs Sarvam access, HTTPS, a supported browser and explicit microphone permission for recording. Neither the tour nor Presenter Demo starts recording.</p></article>
+        <article class="card"><h3>A source link is not verification.</h3><p>Quote checks establish that text comes from the supplied source—not that the source is true, representative or causal. Proposed tests and thresholds have not been run merely because they appear in a pack.</p><p>Live-provider quality, physical devices, screen readers and wider browser/zoom behavior still need the later detailed validation pass.</p></article>
+      </div>
+      <details class="wide-detail"><summary>About this public showcase</summary><div><p>This is a static GitHub Pages site: no application backend, provider calls, microphone controls, analytics or user-content collection. It loads its own public assets and a public link-configuration file. Links you open lead to their own sites and policies.</p><p>Images show only locally captured fictional examples from the approved application. No protected staging session, cookies, traces, provider keys or real user material are published here.</p><p><a href="https://github.com/amit1858/product-bet-review-studio">Inspect the public source and release instructions →</a></p></div></details>
+    </section>
+    <section id="availability" class="closing wrap" aria-labelledby="closing-title">
+      <div><p class="eyebrow">The next move is yours</p><h2 id="closing-title">Bring a bet.<br>Leave with a better question.</h2><p>After signing into the interactive app, choose <strong>Presenter Demo</strong> to see the complete fictional journey, or <strong>Try an example</strong> to explore it yourself. Use <strong>Take a guided tour</strong> for an orientation alongside your own work.</p></div>
+      <div class="availability-card"><h3>Interactive release status</h3><p id="release-status" role="status">Interactive app available. Shared-passphrase access is required; request the production passphrase from the host.</p><a class="button primary" data-live-app href="https://product-bet-review-studio-production.up.railway.app">Open the live app ↗</a><p class="access-note" data-access-note>Protected app: ask the host for the production passphrase. The fictional example and Presenter Demo need no provider keys; live analysis and voice need separate provider setup.</p><noscript><p>The story, screenshots, downloads and live-app links work without JavaScript. The interactive application itself requires JavaScript.</p></noscript><p id="configuration-error" role="alert" hidden></p></div>
+    </section>
+  </main>
+  <footer class="wrap"><span>Product Bet Review Studio<br><strong>The agent advises. The human decides.</strong></span><a href="https://github.com/amit1858/product-bet-review-studio">Source on GitHub ↗</a><a href="#main">Back to the story ↑</a></footer>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "productionUrl": "https://product-bet-review-studio-production.up.railway.app",
+  "accessPolicy": "protected",
+  "accessNote": "Protected app: ask the host for the production passphrase. The fictional example and Presenter Demo need no provider keys; live analysis and voice need separate provider setup.",
+  "applicationCommit": "bd5107fe7dd7fb253debdbc25e750ca74c8b9dc7"
+}

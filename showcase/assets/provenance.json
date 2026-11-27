@@ -1,0 +1,54 @@
+{
+  "applicationCommit": "bd5107fe7dd7fb253debdbc25e750ca74c8b9dc7",
+  "imageSource": "Local approved production build; prewritten fictional example; no provider calls, real user content, credentials, protected browser state or traces.",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "packs": {
+    "product-building-pack.md": "src/buildPack.ts:buildPackMarkdown",
+    "product-bet-starter.md": "src/Guide.tsx:starterTemplate"
+  },
+  "assets": [
+    {
+      "file": "builder.webp",
+      "sha256": "b74343d7165a780081092cc307a94dbbf90dc40eec086ee009db4c550ab336cb"
+    },
+    {
+      "file": "decision.webp",
+      "sha256": "fe249c8086ec0164d37a95cfbe3a930ea0cd253ef8cffcad7243490cae065287"
+    },
+    {
+      "file": "icon.svg",
+      "sha256": "8a4678266b3f42e7f0cb43524bd296e4f9bde14a7de0b4a121331482a79b98cb"
+    },
+    {
+      "file": "material.webp",
+      "sha256": "1ed2536f7dd297be5bf701086fd78a2334489370e1f11e159dba6df8c5b63f8f"
+    },
+    {
+      "file": "presenter.webp",
+      "sha256": "a2072e6c86c857a1c2f9cd1b9fedf5f2e38bcb862825155ac91c72ceea562022"
+    },
+    {
+      "file": "product-bet-starter.md",
+      "sha256": "ea1c059d1fe427a2012a71403bdcb223fc7578e3fa4dbacc030651bfdaf7393f"
+    },
+    {
+      "file": "product-building-pack.md",
+      "sha256": "1e9588c5244b43a74f4150816b33975c4689f35ada47a03e8bafcb5a040e5a8d"
+    },
+    {
+      "file": "questions.webp",
+      "sha256": "86bf4238ca75249cb038d3dd3f3c39947a111c270e65c389c04fd785ff0289bc"
+    },
+    {
+      "file": "review.webp",
+      "sha256": "c110dae1afc2730fac4c8d1220bbd1915e5bb6c87daedf538e62e7880ea895ae"
+    },
+    {
+      "file": "tour.webp",
+      "sha256": "003ee1ebb33b0835b5090131bc65e3eb56cd3b2cf187bc30949da314e09ce927"
+    }
+  ]
+}

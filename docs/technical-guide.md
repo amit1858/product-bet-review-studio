@@ -1,0 +1,259 @@
+# Product Bet Review Studio: technical guide
+
+A mobile-first, editorial PWA for deciding whether a product bet should **proceed, be tested, be reshaped, or stop**. The agent advises; the PM makes and records the decision.
+
+## Run locally
+
+Requires Node.js 22+ and npm. The repository initially contained only this README; there was no application to replace.
+
+```powershell
+npm ci
+Copy-Item .env.example .env
+# Edit .env with your server-side configuration.
+npm run dev
+```
+
+Open **http://localhost:3000**. The fictional example and typed material work without keys. Optional host/demo environment keys enable their respective providers. Personal tab keys require **HTTPS**, including localhost; key entry is disabled on the HTTP preview and it will not transmit them. A configured status means a key is present, not that billing or account access has been verified.
+
+### Session-only bring your own keys
+
+**Provider access** offers separate optional Claude and Sarvam password inputs. After choosing **Use … key in this tab**, the input is cleared and only configuration status is shown. The keys are held in a tab-local memory ref, not React-rendered values, browser storage, cookies, URLs, analytics, exports, logs, or service-worker caches. A full refresh, leaving the page, or **Clear keys** removes them; a new tab starts without keys. Clear keys also clears unfinished input fields and cancels pending analysis/voice, preserving accepted text and the PM's record. Provider work already started may still be billed.
+
+A tab key takes precedence **only for its provider**. Removing it restores any visibly labeled **Host/demo key configured** configuration; invalid personal credentials do not silently fall back to host credentials. Claude supports a workspace-scoped Console API key with Messages/model access and billing, not Claude chat-subscription access. Unscoped Claude keys need an additional workspace header and are not supported by this key-only UI. Sarvam needs an API subscription key with speech/translation access and quota. There is no automatic validation call or paid retry.
+
+Keys go only to the configured same-origin HTTPS backend, in `X-Studio-Claude-Key` for `/api/clarify` and `/api/review`, or `X-Studio-Sarvam-Key` for the three `/api/speech/*` operations. The browser does not call providers directly, follow redirects with credentials, or include keys in request bodies. The backend rejects mixed/wrong-provider, duplicate, invalid/overlong, and non-HTTPS credentials. It strips credential headers from parsed/raw request headers, consumes the key into a fresh provider client for that one operation, and retains no attendee session, cache, database, or process-wide credential map.
+
+The backend necessarily receives the selected key. Use only an operator you trust. If you do not want your key passing through someone else's backend, self-host with the optional server environment keys instead. Claude uses its official SDK with an explicit `https://api.anthropic.com` base URL, API version `2026-10-21`, retries disabled and SDK logging off; the current [authentication documentation](https://platform.claude.com/docs/en/manage-claude/authentication) supports its API-key bearer authentication and requires workspace selection for unscoped keys. Sarvam uses only `https://api.sarvam.ai` with `api-subscription-key`. Provider redirects are rejected. Provider errors and app logs use safe metadata, never upstream credential diagnostics. Otherwise-valid provider content reflecting the supplied key is rejected on the backend and browser rather than echoed into a transcript, review, or translation.
+
+### Server configuration
+
+`.env.example` contains variable names and explanatory comments, with no credentials. Never use `VITE_` variables for secrets or put keys in browser storage. Environment keys are optional **host/demo** configuration and never sent to the frontend.
+
+| Variable | Purpose / default |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Optional host/demo Anthropic Console API key with Messages API access and funded billing; a Claude tab key overrides it |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5`; use an account-accessible model supporting structured outputs |
+| `SARVAM_API_KEY` | Optional host/demo Sarvam API subscription key with STT/TTS/translation access and quota; a Sarvam tab key overrides it |
+| `SARVAM_TTS_MODEL` | `bulbul:v4-flash`; also supports `bulbul:v3` |
+| `SARVAM_TTS_SPEAKER` | `shubh_enhi_companion` for v4-flash, `shubh` for v3; must match the chosen model's official voice catalog |
+| `PORT` | `3000` |
+| `HOST` | `127.0.0.1`; use `0.0.0.0` for containers |
+| `APP_ORIGIN` | `http://localhost:3000`; deployed public HTTPS origin, with **no trailing slash or path** |
+| `TRUSTED_PROXY_CIDRS` | Empty by default; comma-separated audited gateway IPs/CIDRs, never wildcard/all-network trust. Required for backend HTTPS recognition behind a TLS-terminating gateway |
+| `MAX_REQUESTS_PER_HOUR` | `300` combined provider requests per server process |
+| `MAX_REQUESTS_PER_IP_10_MIN` | `60` combined requests per connection in ten minutes |
+| `MAX_CONCURRENT_REQUESTS` | `4` concurrent API requests |
+
+Restart the server after changing environment variables. Voice, pace, and **Read-aloud language** controls are available at the bottom of the app and remain in memory only. **As written · English / mixed** sends the selected original text to TTS. **Hindi · translate before speech** first translates that text with Sarvam, then synthesizes the Hindi result. Machine translation may change nuance; the original review, source quotes, PM decision, and exports remain authoritative and unchanged. The translated text is inspectable and stays in memory only; it is never sent to Claude. Hindi/English speech input and explicit speech-to-English transcription are separate capabilities.
+
+Provider contracts checked against official documentation during implementation:
+
+- [Sarvam STT](https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/rest-api): `POST /speech-to-text`, multipart `file`, **`saaras:v4`**, `mode=codemix` or `translate`, `language_code=unknown`. Synchronous audio is limited to 30 seconds; this app uses a conservative **28-second** cap. Code-mixing preserves English in Latin script and Hindi in its native script; translate mode produces English.
+- [Sarvam TTS](https://docs.sarvam.ai/api-reference/text-to-speech/convert): `POST /text-to-speech`, **`bulbul:v4-flash`**, `text`, **`language_code` (not `target_language_code`)**, `speaker`, `pace`; up to 2,500 characters per request. This app chunks at 2,400, requests 22,050Hz WAV and disables provider cached responses. Each `audios[]` entry is a separate base64 WAV file, decoded and played in order, never concatenated as encoded strings. WAV headers, PCM format, chunk bounds, and nonempty data are validated before delivery to the browser.
+- [Sarvam translation](https://docs.sarvam.ai/api-reference/text/translate-text): `POST /translate`, **`mayura:v1`**, `input`, `source_language_code=auto`, `target_language_code=hi-IN`, `mode=formal`, `output_script=fully-native`, `numerals_format=international`; response `translated_text`. Mayura documents a 1,000-character input limit and automatic source detection. The app uses sentence-aware 900-character source chunks, validates each response with an application-only 5,000-character cap, bounds the complete spoken section to 18,000 characters, then rechunks for TTS. Invalid/overlong translation fails explicitly without synthesizing English as Hindi. No new environment variable is needed for this fixed translation path.
+- [Official voice catalog](https://docs.sarvam.ai/api/api-guides-tutorials/text-to-speech/voices): model-specific lowercase speakers. The current v4-flash API lists `shubh_enhi_companion` (this app's default), `simran_enhi_companion`, and `ishita_enhi_companion`; these are English/Hindi companion voices. The API's own v4 default is `shubh_enhi_ads`, not the companion selected here. Catalog presence is not a live-account or voice-quality test.
+- [Anthropic structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs): Messages API with `output_config.format`, schema validation and API version `2026-10-21`.
+- [Claude models](https://platform.claude.com/docs/en/models/overview): model access and supported contracts can change; check these before substituting a model.
+
+### Development-only Sarvam MCP
+
+The PWA continues to use **direct server-side Sarvam REST**, not MCP. [Sarvam's official MCP](https://docs.sarvam.ai/api/developer-tools/mcp) is a development aid. Its documented Python 3.11+ package is `sarvam-mcp`; after installing it in an isolated environment, the entry point is `sarvam-mcp` (or `uvx sarvam-mcp`). Add it in your MCP client's local stdio settings:
+
+```json
+{
+  "mcpServers": {
+    "sarvam": {
+      "command": "sarvam-mcp",
+      "env": {}
+    }
+  }
+}
+```
+
+Use the isolated environment's absolute executable path if it is not on PATH. The local `.mcp.json` entry prepared during this pass is ignored by git and source archives; import it only into a client supporting this format. It is **not proof the app has loaded or started the server**. Keep keys out of this JSON: inherit `SARVAM_API_KEY` from the developer process's environment or use the package's documented local credential store. Runtime `.env` loading does not automatically configure an MCP client.
+
+**Verification limitation:** this coding environment supports MCP, but Sarvam was not loaded and `uvx` was unavailable. In this completion pass, one bounded isolated `pip install sarvam-mcp` attempt used only official public PyPI, with retries disabled and a 15-second timeout. Downloading `sarvam_mcp-0.3.0-py3-none-any.whl.metadata` from `files.pythonhosted.org` failed with **`SSLV3_ALERT_HANDSHAKE_FAILURE`**. No further attempt, TLS bypass, or mirror switch was made in this pass. The package did not start and **no `sarvam_code_*` result was obtained**. Contracts above were rechecked against official web documentation and non-billable mocked tests, not claimed as MCP builder verification.
+
+Once installation is available, discover schemas first and use `sarvam_code_api_reference`, `sarvam_code_languages`, `sarvam_code_speakers`, `sarvam_code_snippet`, `sarvam_code_recommend_model`, and `sarvam_code_validate_request` for contract verification. Check `saaras:v4` codemix/translate, `bulbul:v4-flash`, companion IDs, Mayura automatic source detection/Hindi translation, fields, and limits. Builder tools are documented as non-billable; `sarvam_tools_*` may be billable. The current smoke-check allowance is **at most one synthetic STT, one TTS, and one translation call**, only after a key is securely configured, with no paid retries. No live call was made in this pass because credentials were absent. Do not copy developer MCP configs or credentials into the PWA, Docker image, or repository.
+
+## Product and implementation
+
+**React 19 + TypeScript + Vite**, served by Express 5. Zod schemas are shared between the browser and server. Anthropic's official SDK runs only on the server. Sarvam uses a small interchangeable `SpeechProvider` adapter.
+
+The journey is welcome → material → up to four clarification questions → structured review → PM decision pack. The PM can correct the interpretation, revisit material, leave answers unknown, disagree with the recommendation, and edit their decision. Changing input or clarification answers invalidates downstream reviews and decisions.
+
+The review presents source-linked evidence, limitations, assumptions, unknowns, a falsifiable challenge, proposed failure paths, and a concrete cheap test. Quotes are checked against their declared sources; this verifies **quotation provenance, not the truth of the source or the causal inference**. Generated claims remain explicitly unverified. Test thresholds are proposals, not results.
+
+The final pack includes a concise leadership story: **signal → tension → what evidence supports / does not establish → implication → decision needed**. It reuses the first source-linked signal and its limitation, the existing challenge, and the proposed learning test, without another model call or invented validation. With no evidence, it says so explicitly. The same narrative appears in the UI, Markdown copy/export, and read-aloud. The PM's decision/rationale remain separate from the advisory agent recommendation, including when the PM disagrees.
+
+The example is fictional, pre-authored, and clearly labeled. Its illustrative answers do not adapt to typed clarification responses. Choose **Run this example with Claude** when configured, or edit its material, for live analysis. Correcting its interpretation also switches to live analysis.
+
+The design uses shared product-owned tokens, serif editorial headings, legible system body fonts, and labeled evidence/risk treatments. **Paper** is the warm editorial default, regardless of OS preference or obsolete query-string hints. The labeled theme selector also offers **Midnight** (dark) and **Field Notes** (restrained botanical light). Only an explicitly selected theme is saved in `product-bet-studio:theme:v1`; blocked storage is reported and the theme still works for the tab. There is no builder theme script or builder branding. Responsive cards, visible keyboard focus, 44px controls, reduced-motion support, and safe-area-aware playback controls remain.
+
+The visual system connects **Signal → Question → Test → Decision** without renaming or unlocking the four existing workflow stages. A 1,264px desktop canvas, semantic theme accents, layered process cards and readable labels replace the earlier narrow document layout. Landing explanations, guide prompts/examples, the starter template and builder methodology details use native keyboard-operable expanders: initial pages are compact, while full content remains available. Privacy, fictional-content and provider boundaries remain visible outside those expanders. If starter-template clipboard access fails, its manual-copy expander opens automatically.
+
+The connected four-stage navigator distinguishes current, completed, and unavailable stages; editing upstream material still invalidates later work. Expandable reasoning trails map supplied material, open clarification questions, a source-linked signal and its limitation, the strongest counterargument, and a proposed small test. They reuse existing content without another model call, scoring, or invented validation. Proposed tests and the PM's own choice remain distinct. Short entry motion never hides content or delays navigation and is disabled by reduced-motion preferences.
+
+**Build your own Product Bet** is a static end-user guide at `/#guide`, linked from the landing page, decision pack, and Markdown export. It includes four stages, prompts, outputs, handoffs, one clearly fictional example, and a copyable blank starter template with a manual-copy fallback. Same-document hash navigation supports browser back/forward, including section targets, without discarding in-memory Studio work. Opening the guide respects pending-request and unaccepted-transcript navigation locks, including through browser history. Reloading still clears session content and keys. The guide does not receive current material or credentials, does not bypass the hosted access gate, and is not a technical clone/build guide.
+
+**Take a guided tour** starts an optional four-stop, in-page walkthrough from the landing page or any journey stage. Back, Next, Skip, Finish and Escape operate only the tour; they never navigate workflow stages, edit content, start recording, call providers or choose a decision. A dashed outline marks the relevant control or journey marker without an overlay. Starting is disabled during pending work or unaccepted transcripts. Explicit entry focuses the tour's Next control; exit returns to the entry control. Progress is tab-memory only and replay always starts at Material. The landing illustration stays static. Short journey-marker/heading-rule motion never moves inputs or hides text and is disabled under reduced motion. Native focus/navigation scrolls instantly to avoid smooth-scroll races during error recovery.
+
+**Build an app like this** is the separate static builder guide at `/#builder`. It teaches problem validation, deliberate tool choice, a buildable PRD, flow/state design, small tested slices, independent and second-order review, and reflection. Its reusable Markdown pack includes PRD/prompt templates, screen/state, test/accessibility, privacy/credential, and readiness checklists plus a clearly fictional worked example. Copy/download includes only authored educational content, not current material, keys, decisions, source code, private prompts or deployment settings. It shares the end-user guide's mounted-app/history-lock and hosted access-gate behavior. No new storage, dependency or backend contract is involved.
+
+On a journey screen, **Show highlighted area** explicitly focuses/scrolls to the relevant control or unavailable marker without activating it; **Return to tour** focuses the tour controls again. Neither action navigates a stage. Spotlight focus is disabled during pending work or unaccepted transcripts. The tour is an orientation, not an automatic demo: it never fills an example or advances the workflow for you.
+
+**Presenter Demo** is a distinct, read-only four-stop click-through launched from the landing page or journey actions. Back, Next, Replay and Exit control only its in-memory stop; talking points can be hidden. It reuses static fictional fixtures and reasoning visuals, labels every stop illustrative/unverified, and never invokes AI, speech, export, storage or backend requests. The regular app still makes its initial configuration-status request before demo entry. Reconnection does not refresh backend status while presenting. Real workspace controls and provider/voice controls are hidden while the demo runs; workspace components remain mounted to preserve draft consent, both material fields, answers, decisions, errors and tour progress. Entry is blocked during pending analysis or unaccepted transcripts. Exiting restores the entry focus; Escape exits from demo content. Changing a guide/history route also leaves the demo without changing work. Replay resets only the demo. This is not a second editable workspace or live provider response.
+
+**Try it yourself** on the landing page explains the protected staging sign-in, unchanged **Try an example** path, four stages, tour, separate builder pack and provider boundaries. The pre-authored example requires no keys; editing its bet or interpretation switches to live Claude analysis. Voice remains a separate explicit opt-in requiring Sarvam configuration. Presenter readiness and production readiness are separate gates.
+
+### Voice behavior
+
+- Tap **Speak** to start; tap **Stop & transcribe** to finish. There is no always-listening or full-duplex mode.
+- Each turn automatically ends at **28 seconds**, with an explicit notice when capped or shortened. Browser-decoded audio is converted to mono 16kHz, 16-bit PCM WAV; the server validates the actual PCM duration and limits upload size.
+- Default transcription preserves Hindi/English code-mixing. **Translate to English** is an explicit alternative.
+- An editable transcript appears first. The main workflow is blocked until that transcript is added or discarded. Nothing reaches Claude merely because transcription completed.
+- Microphone-denied, processing, empty-transcript, network, retry, and discard states keep text input available. Failed transcription can explicitly retry the in-memory recording; malformed transcripts do not enter the bet. Playback failures stay visible near the viewport rather than being hidden below the review.
+- Read-aloud works on questions, the understood bet, evidence with provenance/limitations, assumptions, unknowns, pre-mortem paths, challenge, test, recommendation, leadership story, and final concise decision record. Stop cancels translation/synthesis/playback. Explicit replay reuses the most recent prepared audio without another translation or TTS request; changing settings or workflow stage clears that cache. Failures have explicit retry/replay controls, never automatic paid retries.
+- Long speech uses sentence-aware chunks, including Hindi punctuation, with size-safe fallback. Hindi translation adds requests and latency before any TTS; each translation/TTS chunk consumes a separate shared request-budget unit. The spoken final pack intentionally omits full pasted source notes; copy/export includes those sources.
+
+### Privacy and limits
+
+No app accounts, database, analytics, raw request logging, automatic external research, uploads of arbitrary documents, persisted attendee credentials, or automatic sharing.
+
+Text, reviews, decisions, and audio stay in memory by default. Reloading clears them. A chosen appearance preference persists separately; it never includes user content or credentials. The optional **Keep this unsent draft on this device** checkbox stores only idea/context text in localStorage. Saved drafts are not automatically restored; they must be restored or deleted explicitly. Unchecking deletes that draft. Browser storage is not encrypted and is accessible to people using the same browser. Audio is not stored in localStorage or the service-worker cache.
+
+Starting or exploring an example pauses draft saving; the fictional material cannot silently replace a previously opted-in draft.
+
+Live analysis sends material to **Anthropic**. STT sends recorded audio to **Sarvam**; translation sends selected source text to Sarvam; TTS sends the original or translated spoken text to Sarvam. Provider retention, account settings, and policies apply; session-only app behavior is **not a provider zero-retention guarantee**. Use synthetic or permissioned material for the showcase.
+
+Errors are logged only as generic event/code/status metadata. Upstream error messages, API keys, prompts, transcripts, and recordings are not logged or returned as diagnostics. Requests have size (128KB JSON, bounded PCM audio), token, duration, timeout, concurrency, per-IP and process-wide limits. Disconnecting cancels a provider request but does not release its concurrency slot until the operation settles. There are no automatic paid-request retries.
+
+Limits use in-memory stores. They reset on restart and are **not shared across replicas**. Origin checks are browser cross-origin protection, not authentication. For an internet-hosted showcase, use a single instance, provider-side spend limits, and an invite-only reverse-proxy/access policy. This MVP is not an abuse-proof public API.
+
+Proxy trust is off unless `TRUSTED_PROXY_CIDRS` explicitly lists audited proxy addresses. Forwarded IP/protocol headers from untrusted peers cannot bypass limits or enable personal-key requests. An HTTPS gateway must overwrite client-supplied forwarding headers and connect from one of those addresses; Node must remain private to it. The backend requires both an HTTPS `APP_ORIGIN` and an actually secure request, or HTTPS recognized through that trusted gateway. With trust off, attendees behind a proxy may share its per-connection budget. BYOK and demo requests share the same per-connection, hourly, input and concurrency limits; no budget is keyed by an attendee secret.
+
+## Production / self-host
+
+### Protected Railway staging
+
+The existing Dockerfile runs one persistent Node service, binds `0.0.0.0`, and reads Railway's runtime `PORT`. Deploy the verified local checkout into a separate **staging** environment, never an existing project's service. No database, volume, cache service, Git push, or custom domain is needed.
+
+Railway's `RAILWAY_PROJECT_ID` makes authentication mandatory: startup fails without a 32-256 visible-ASCII-character staging passphrase and an HTTPS `APP_ORIGIN` containing no path/trailing slash. Enter the passphrase as `STAGING_PASSWORD` **only through Railway's secure Variables UI or an approved no-echo terminal**, never a CLI argument, repository file or example environment file. Set `STAGING_AUTH_REQUIRED=true` explicitly as well. Do not configure `ANTHROPIC_API_KEY` or `SARVAM_API_KEY`; Railway staging refuses hosted provider keys and generic proxy trust.
+
+Every application, static, PWA and API route is behind the server gate. The sign-in form checks the exact origin and HTTPS, uses a constant-time passphrase-digest comparison, and limits attempts to ten per minute across the process. Its signed, expiring eight-hour `__Host-` cookie is `Secure`, `HttpOnly`, `SameSite=Strict`, and contains no passphrase or provider key. Changing the passphrase invalidates existing sessions. `POST /_staging/logout` from the same origin clears the browser cookie; copied cookies remain valid until expiry or passphrase rotation. No session database is used. On session expiry, API errors preserve text and direct the user to sign in in another tab. The browser sends the access cookie only to the same origin; provider keys remain tab-memory-only.
+
+Protected staging responses are `no-store`. Its authenticated `/sw.js` uses a network-only worker and removes prior Studio shell caches: **offline shell reuse is intentionally unavailable for protected staging**, so an expired session cannot reveal a cached application. Install metadata, icons and online refresh still work behind authentication. Normal self-hosted PWA caching is unchanged.
+
+[Railway's documented HTTPS-only edge](https://docs.railway.com/networking/public-networking/specs-and-limits) supplies `X-Forwarded-Proto: https` and `X-Real-IP`. Only Railway mode accepts that protocol with an exact configured Host match; it uses a validated `X-Real-IP` for client budgets and ignores `X-Forwarded-For`. Express `trust proxy` remains off. The container has no public TCP proxy, and the isolated project's private network must not gain unrelated services that could forge edge headers. Health/status endpoints are also gated; do not configure an unauthenticated application health-check bypass.
+
+Keep **one replica**. All login/provider/concurrency budgets live in that process, reset on restart, and do not coordinate across deployments or replicas. The existing 75-second analysis / 45-second speech deadlines and 28-second, mono 16kHz WAV recording cap fit Railway's documented networking timeouts; no Netlify Functions adapter or reduced voice limit is needed. Provider-side spending limits remain important: request counts are not dollar caps.
+
+Inspect workspace Compute and Agent usage **before and after** deployment without modifying their limits. The Compute hard limit can stop every workload, including unrelated projects; the Railway Agent budget is separate from BYOK provider billing. Idle persistent-service memory, CPU and egress consume Hobby usage even without provider calls. No auto-scaling, extra resources, add-ons or billing changes are required.
+
+```powershell
+npm run build
+npm run start
+```
+
+`npm run dev` provides Vite HMR and watches server changes. Production serves compiled assets plus the same server-side API; do not deploy just `dist` to a static host.
+
+Alternatively:
+
+```powershell
+docker build -t bet-studio .
+docker run --rm -p 127.0.0.1:3000:3000 --env-file .env bet-studio
+```
+
+When using a container, set `HOST=0.0.0.0` in the environment. Set `APP_ORIGIN` to the URL users actually open. Host/demo provider keys are optional; configure them in the host's secret environment, not in the image or repository. `.dockerignore` excludes real environment files.
+
+Put an HTTPS reverse proxy in front of the Node service and serve the app at the origin root, not under a subpath. Microphone access, installation, service workers, and reliable clipboard support require HTTPS (localhost is the development exception). Disable proxy access/body logging and audio/request buffering to disk. Set provider-side budgets and access controls before opening the URL to attendees.
+
+### Before any future hosted showcase
+
+The optional staging gate described below protects every application, asset, PWA and API route. Other hosted arrangements still require a fail-closed access policy:
+
+- Require an authenticated email allowlist / invitation policy at the HTTPS gateway for **every route, including `/api/*`**, not just the landing page. Deny anonymous users before requests reach Node; verify unauthenticated direct API requests are denied.
+- Keep the Node port private to the gateway (loopback or a private container network). Do not expose a second ungated origin or publish a container port to all interfaces. Only the gateway should be able to reach it.
+- Put secrets in the host's secret environment, set provider-side spending/quota alerts and hard limits where available, and start with one instance and low process-wide limits. In-memory request caps are not money-denominated or durable billing controls.
+- Disable gateway/body/diagnostic recording, disk request buffering, and API response caching. Never log `X-Studio-Claude-Key`, `X-Studio-Sarvam-Key`, provider authentication headers, or request bodies; redact them at every gateway/APM layer before accepting BYOK. Trust only the actual TLS gateway addresses, overwrite incoming forwarding headers, and verify direct/untrusted HTTP requests cannot use attendee keys. Forward aborts; allow enough upstream time for the bounded 75-second analysis / 45-second speech and translation requests (Anthropic SDK timeout: 70 seconds). Use synthetic or permissioned material only.
+- Event Wi-Fi, NAT, and the reverse proxy can pool participants behind a connection limit. Test the actual venue path, keep short turns, account for shared limits, and use the explicit fictional example if connectivity or quota fails; never silently retry a paid call.
+
+The public shell can still be opened from an already installed offline cache after gateway access is revoked. That shell contains no provider credentials or cached reviews/audio. Locally opted-in drafts remain device data; revoking hosted access cannot remotely erase them. The gateway must independently authorize **every live API request**.
+
+### PWA and offline behavior
+
+The manifest, ordinary/maskable PNG icons, and versioned service worker are included. Install using the browser's install action, or **Share → Add to Home Screen** on supported mobile browsers.
+
+Production builds precache the public shell and hashed static assets. API responses, audio, and user context are never cached. After an initial online visit, the welcome/example and text editing can work offline. **AI and speech do not work offline.** Unsent text is retained only with explicit device-draft consent.
+
+The service worker does not force an update/reload while a PM is working. A waiting-version notice asks the PM to finish/export, close all Studio tabs, and reopen. Build IDs include public manifest/icon content as well as compiled assets. Cache lookups are scoped to the current release; navigation falls back only on a network failure, never on a gateway's 401/403 or other HTTP error. `/api` and `/api/*`, non-GET traffic, and unlisted media are not intercepted. If initial installation fails, the UI warns that offline access is unavailable; a failed update keeps the existing installed version and active work available.
+
+### Source/archive hygiene
+
+Local MCP/editor tooling, virtual environments, worktree metadata, real `.env` files, dependencies, build output, logs, and test reports are excluded from source archives and/or Docker contexts with `.gitignore`, `.gitattributes`, and `.dockerignore`. `.env.example`, source, tests, documentation, and the npm lockfile remain in the source archive. Git archives exclude **tracked** paths only; inspect any ad-hoc ZIP separately. Never archive the whole working directory or a developer's home/config directory as a release.
+
+## Checks
+
+```powershell
+npm run build
+npm test
+npx playwright install chromium
+npm run test:e2e
+```
+
+Unit/integration tests cover structured output, exact source quotes, unsupported references, duplicate decisions, missing configuration, provider errors, audio duration, current Sarvam request fields including translation, sentence-aware chunking, origin checks, payload bounds, and shared request limits despite spoofed forwarded headers. BYOK tests use synthetic keys and mocked upstream SDK/REST responses to check provider isolation, request-only precedence, concurrent attendee isolation, later requests without keys, trusted TLS, invalid credentials, redirects, log/error redaction and usage caps.
+
+Production browser tests cover desktop and phone layouts (including dark OS preferences with an always-light app); readable text/action contrast; grounded leadership narrative and human/agent decision separation; download; live-workflow retry and invalidation; consented mixed-language/translated transcripts; denied microphones and capped recordings; Hindi translation before TTS, malformed-translation failures, grounded finding-level speech, stop/replay without new requests and visible playback errors; draft isolation/restoration; and real offline service-worker behavior. BYOK browser tests intercept a synthetic HTTPS origin without bypassing certificate validation or forwarding credentials to any real service; they verify separate request headers, cleared input fields, refresh/new-tab isolation, no browser-storage/export/log leakage, explicit failure without demo fallback, cancellation on clearing, and HTTP refusal. Production PWA tests also verify manifest/icon paths and PNG dimensions, actual installation, waiting-version notices without lost input, activation after closing tabs, old-cache cleanup, and failed initial installation/update. Unit tests exercise cache/auth boundaries and corrupt WAV rejection. Provider responses in automated tests are explicitly mocked; no paid calls are made.
+
+**Live provider quality and real-phone behavior remain unverified.** After secure key configuration, use only the limited synthetic Sarvam smoke allowance above. Further provider calls, including Claude and additional language/voice comparisons, need separate approval. Automated fixtures cannot verify account access, billing, model availability, translation fidelity, regional latency, transcription quality, or the selected voice. Container deployment and physical iOS/Android installation also require host/device checks.
+
+### Manual next-pass checklist
+
+- [ ] Resolve the local package-download/TLS issue without disabling verification; launch Sarvam MCP, discover schemas, and run only the builder checks listed above. Record any documentation discrepancy before changing runtime contracts.
+- [ ] Check welcome → material → clarification → review → decision pack on narrow Android/iOS and desktop, with system dark mode enabled, keyboard navigation, long Hindi/English text, and device safe areas.
+- [ ] Start with missing keys and confirm the explicit example/unavailable states. Use synthetic material to check correction/invalidation, unknown answers, no-evidence narrative, and a PM decision that differs from the agent. Confirm copy/download includes the unchanged rationale and full sources.
+- [ ] When a key is securely configured, make at most one synthetic STT, one TTS, and one Hindi-translation call; record outcomes and do not retry paid failures. Additional Claude, language-mode, or voice-quality comparisons require separate approval.
+- [ ] On a real phone, verify edited transcript consent, retry/discard, the 28-second cap, Hindi translation fidelity and unchanged written record, all returned WAV segments, blocked autoplay, stop/abort/replay, and long-text chunking. Use mocks or the permitted synthetic smoke calls until broader paid testing is approved.
+- [ ] On an approved HTTPS/private-gateway setup, verify key clearing, refresh/new-tab behavior, trusted TLS detection, and credential redaction at proxy/APM layers. Do not enter real attendee keys into an untrusted backend or bypass TLS for local demos.
+- [ ] On physical devices, test microphone-denied/unavailable/interrupted states, install icons, airplane-mode shell/example, explicit unencrypted draft restore/delete, and failed/slow networks. Confirm API/text/audio are absent from Cache Storage.
+- [ ] Repeat the automated two-version worker lifecycle check on a physical installed PWA: retain active work while waiting, close all app clients, reopen, and confirm the new shell and cache cleanup. Desktop Chromium automation does not prove iOS/Android installed-app behavior.
+- [ ] Only after separately approving a hosted deployment, verify the gateway deny/allow list, private origin, API authorization, provider spending controls, request logging disabled, venue Wi-Fi limits, and secret-free Docker/source archives.
+
+## 45-minute demo runbook
+
+| Time | Demonstration |
+| --- | --- |
+| 0–5 min | Start on the editorial welcome. Explain “the agent advises; the PM decides,” privacy and the fictional example. |
+| 5–10 min | Explore the illustrative review. Open a source quote; distinguish a complaint from evidence of causality. |
+| 10–18 min | Start the preset again and choose **Run this example with Claude**, or paste a synthetic bet. Show focused questions; correct the interpretation and leave one answer unknown. |
+| 18–25 min | Speak a short Hindi/English answer. Stop recording, edit the transcript, and explicitly add it. Read a question aloud; stop playback. |
+| 25–33 min | Run the live review. Discuss the riskiest assumption, pre-mortem, proposed test and its stop threshold. Compare the agent recommendation with the evidence. |
+| 33–40 min | Deliberately disagree with the agent. Select a PM decision and record the rationale. Copy or download the decision pack; point to separate PM/agent sections. |
+| 40–45 min | Show install/offline behavior and explicit draft consent. Explain limitations and attendee self-host setup. |
+
+This pass remains local. Before any separately approved hosted session, enforce the gateway/spend controls above, verify provider configuration within the approved paid-call allowance, test microphone permissions and chosen voices, prime the production shell online, and keep the illustrative example ready. Use short turns and small material to keep latency/cost predictable. Do not claim the illustrative fallback is a live integration if a provider fails. Retry only by explicit action and within the approved allowance; if quota/authentication fails, explain it and use the labeled example.
+
+## File-level guide
+
+| Files | Responsibility |
+| --- | --- |
+| `src/App.tsx`, `src/styles.css`, `src/sample.ts` | Editorial journey, design tokens, review/decision screens, fictional scenario |
+| `shared/schema.ts` | Input/output contracts, source identifiers/checks, deterministic full decision pack |
+| `src/Voice.tsx`, `src/audio.ts`, `src/api.ts` | Recording/transcript consent, resampling, playback, provider requests and errors |
+| `src/Credentials.tsx`, `shared/credentials.ts` | Tab-only keys, configuration disclosure, cancellation/clearing, provider/header isolation |
+| `server/claude.ts`, `server/speech.ts` | Controlled Claude stages and replaceable Sarvam adapter |
+| `server/app.ts`, `server/config.ts`, `server/errors.ts`, `server/index.ts` | Optional host keys and request-only BYOK, trusted TLS, origin/usage/payload limits, error sanitization, serving |
+| `src/useDraft.ts` | Explicit, device-local unsent-draft persistence |
+| `pwa/sw.js`, `vite.config.ts`, `src/main.tsx`, `public/manifest.webmanifest`, `public/icons/` | Versioned static-only caching, registration, installation assets |
+| `.env.example`, `Dockerfile`, `.dockerignore`, `package.json` | Self-host configuration, build and deployment |
+| `tests/`, `playwright.config.ts` | Focused workflow, adapter and production-browser coverage |
+
+## Known limitations / deliberate scope
+
+- One controlled workflow, no autonomous agents, accounts, history, document parsing, external research, PRD/prototype generation, or team sharing.
+- Clarification and review are two bounded model calls; packs are assembled locally to preserve the PM's decision. No streaming output or speculative partial conclusions.
+- A validated quotation can still describe unreliable source material. Schema checks do not prove the model's reasoning is correct.
+- Turn-based voice favors reliability over uninterrupted dictation. Capture depends on browser MediaRecorder/AudioContext support; playback may need a second tap under strict autoplay policies.
+- The exported Markdown contains full sources. Review it before sharing; there is no hosted sharing endpoint or generated PDF.
+- Device drafts cover only the initial material, not clarification answers or the complete review. There is no automatic recovery after a reload without prior consent.
+- Single-process budgets are showcase safeguards, not durable billing limits or distributed rate limiting.
