@@ -1,6 +1,6 @@
 {
-  "applicationCommit": "bd5107fe7dd7fb253debdbc25e750ca74c8b9dc7",
-  "imageSource": "Local approved production build; prewritten fictional example; no provider calls, real user content, credentials, protected browser state or traces.",
+  "applicationCommit": "9bbaab2cfd971fe8ad98e2082aa2c07d27fef87e",
+  "imageSource": "Genuine public production captures at https://product-bet-review-studio-production.up.railway.app/; fictional and unverified example only; zero provider/microphone attempts; no browser-state exports, credentials or real user content. The showcase icon is a green palette adaptation of the Studio mark.",
   "viewport": {
     "width": 1440,
     "height": 900
@@ -12,23 +12,23 @@
   "assets": [
     {
       "file": "builder.webp",
-      "sha256": "b74343d7165a780081092cc307a94dbbf90dc40eec086ee009db4c550ab336cb"
+      "sha256": "7d53bac7a910abcac7f0db2b67b5ebe998bfa389a2e3b00ec0e741befdb9abc8"
     },
     {
       "file": "decision.webp",
-      "sha256": "fe249c8086ec0164d37a95cfbe3a930ea0cd253ef8cffcad7243490cae065287"
+      "sha256": "7b4c2f42a3055a2dbae862393d0b5134178cb042587fdfce6f16d50a44df8429"
     },
     {
       "file": "icon.svg",
-      "sha256": "8a4678266b3f42e7f0cb43524bd296e4f9bde14a7de0b4a121331482a79b98cb"
+      "sha256": "6e86c9fabb94b626064c58be26d395c6fd5d72a199aa52341974950a35ae5d17"
     },
     {
       "file": "material.webp",
-      "sha256": "1ed2536f7dd297be5bf701086fd78a2334489370e1f11e159dba6df8c5b63f8f"
+      "sha256": "ee8ebe934fdaad85aef788d2143e4b75f614259c5ea1b8c515db93de14c18658"
     },
     {
       "file": "presenter.webp",
-      "sha256": "a2072e6c86c857a1c2f9cd1b9fedf5f2e38bcb862825155ac91c72ceea562022"
+      "sha256": "9b105acee0045b594bb9591580dc7539517f4c9e1de2ab46d57e82284175de35"
     },
     {
       "file": "product-bet-starter.md",
@@ -40,15 +40,15 @@
     },
     {
       "file": "questions.webp",
-      "sha256": "86bf4238ca75249cb038d3dd3f3c39947a111c270e65c389c04fd785ff0289bc"
+      "sha256": "87e8d6102c8b094495c5b8e50d160b1b744da113a33e9fe133c22175e52527a1"
     },
     {
       "file": "review.webp",
-      "sha256": "c110dae1afc2730fac4c8d1220bbd1915e5bb6c87daedf538e62e7880ea895ae"
+      "sha256": "727d45b0cbcd1c6e6cc4f3473cc4c56197673f9775124abc4c58272c152007dd"
     },
     {
       "file": "tour.webp",
-      "sha256": "003ee1ebb33b0835b5090131bc65e3eb56cd3b2cf187bc30949da314e09ce927"
+      "sha256": "b6cfef069a9b630aa609e58762e2f02d241563ab5b3133465de10d60b526867d"
     }
   ]
 }

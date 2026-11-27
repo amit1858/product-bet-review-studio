@@ -1,6 +1,6 @@
 {
-  "productionUrl": "https://product-bet-review-studio-production.up.railway.app",
-  "accessPolicy": "protected",
-  "accessNote": "Protected app: ask the host for the production passphrase. The fictional example and Presenter Demo need no provider keys; live analysis and voice need separate provider setup.",
-  "applicationCommit": "bd5107fe7dd7fb253debdbc25e750ca74c8b9dc7"
+  "productionUrl": "https://product-bet-review-studio-production.up.railway.app/",
+  "accessPolicy": "public",
+  "accessNote": "Open the live app without a shared password. The Presenter Demo and unchanged fictional example need no provider keys. Live analysis and voice require your own provider setup.",
+  "applicationCommit": "9bbaab2cfd971fe8ad98e2082aa2c07d27fef87e"
 }

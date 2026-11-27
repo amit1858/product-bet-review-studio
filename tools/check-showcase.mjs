@@ -8,16 +8,16 @@ const root = fileURLToPath(new URL('../showcase/', import.meta.url));
 const html = await readFile(path.join(root, 'index.html'), 'utf8');
 const config = JSON.parse(await readFile(path.join(root, 'config.json'), 'utf8'));
 assert.match(config.applicationCommit, /^[a-f0-9]{40}$/);
-assert.ok(['unverified', 'protected', 'public'].includes(config.accessPolicy));
+assert.equal(config.accessPolicy, 'public');
 assert.ok(typeof config.accessNote === 'string' && config.accessNote.length > 20);
-if (config.productionUrl !== null) {
-  const url = new URL(config.productionUrl);
-  assert.equal(url.protocol, 'https:');
-  assert.equal(url.username + url.password + url.search + url.hash, '');
-  assert.notEqual(config.accessPolicy, 'unverified');
-} else {
-  assert.match(html, /Production link pending/);
-}
+assert.equal(config.productionUrl, 'https://product-bet-review-studio-production.up.railway.app/');
+for (const [, href] of html.matchAll(/data-live-app href="([^"]+)"/g)) assert.equal(href, config.productionUrl);
+assert.ok([...html.matchAll(/data-live-app href=/g)].length >= 2);
+for (const id of ['method', 'studio', 'takeaway', 'workshop', 'canvas', 'worked-example', 'host', 'build', 'trust']) assert.ok(html.includes(`id="${id}"`));
+assert.equal([...html.matchAll(/data-field="/g)].length, 14);
+assert.equal([...html.matchAll(/<fieldset/g)].length, 7);
+assert.doesNotMatch(html, /<form\b|name="bet-/i, 'The canvas must not have a native network submission path');
+for (const match of html.matchAll(/<(input|textarea|select)\b([^>]+)>/g)) assert.match(match[2], /autocomplete="off"/);
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
 assert.equal(new Set(ids).size, ids.length, 'Duplicate document target');
 for (const [, value] of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
@@ -41,6 +41,11 @@ async function checkFolder(folder) {
     if (entry.isDirectory()) { await checkFolder(filename); continue; }
     assert.ok(allowed.has(path.extname(filename)), `Unexpected Pages artifact: ${entry.name}`);
     assert.ok(!/(?:\.env|cookie|storage.state|trace|credential|session)/i.test(entry.name), `Forbidden Pages artifact: ${entry.name}`);
+    if (['.html', '.css', '.js', '.json', '.svg', '.md'].includes(path.extname(filename))) {
+      const text = await readFile(filename, 'utf8');
+      assert.doesNotMatch(text, /passphrase|staging|protected app|after signing into|obtain access from the host/i, `Stale access copy: ${entry.name}`);
+      assert.doesNotMatch(text, /#(?:b11f4b|fd8ea1|9a1a41)\b/i, `Old pink accent: ${entry.name}`);
+    }
   }
 }
 await checkFolder(root);
@@ -52,4 +57,10 @@ for (const asset of provenance.assets) {
   assert.equal(createHash('sha256').update(contents).digest('hex'), asset.sha256, `Asset provenance mismatch: ${asset.file}`);
 }
 assert.doesNotMatch(html, /bet-studio-staging|api\.anthropic|api\.sarvam/);
-console.log('Showcase config, section targets, relative assets, image descriptions, asset provenance and static-only file allowlist passed.');
+const script = await readFile(path.join(root, 'showcase.js'), 'utf8');
+assert.doesNotMatch(script, /localStorage|sessionStorage|indexedDB|sendBeacon|XMLHttpRequest|document\.cookie|innerHTML/);
+assert.equal([...script.matchAll(/\bfetch\(/g)].length, 1, 'Only the public configuration may be fetched');
+assert.match(script, /pagehide/);
+assert.match(script, /beforeprint/);
+assert.match(script, /text\/markdown/);
+console.log('Pages build passed: public production links, workshop/canvas structure, relative assets, provenance, stale-copy scan and volatile-input boundaries.');
